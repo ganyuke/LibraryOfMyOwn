@@ -420,13 +420,11 @@ class LibraryService:
         ]
 
     def can_view_revision(self, path: str, sha: str, *, admin: bool) -> bool:
-        if self.repo.get_blob_text(path, sha) is None:
-            if admin:
-                return self.revision_path(path, sha) is not None
+        blob_path = self.revision_path(path, sha)
+        if blob_path is None and self.repo.get_blob_text(path, sha) is None:
             return False
         if admin:
             return True
         if not self.is_published(path):
             return False
-        blob_path = self.revision_path(path, sha) or path
-        return not self.is_suppressed(blob_path, sha)
+        return not self.is_suppressed(blob_path or path, sha)
