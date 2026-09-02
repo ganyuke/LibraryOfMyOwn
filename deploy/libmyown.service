@@ -1,0 +1,24 @@
+[Unit]
+Description=LibraryOfMyOwn
+After=network.target
+
+[Service]
+Type=simple
+User=libmyown
+Group=libmyown
+WorkingDirectory=/opt/libmyown/app
+Environment=PATH=/opt/libmyown/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/libmyown/app/.env
+ExecStart=/opt/libmyown/venv/bin/python -m libmyown.main
+Restart=on-failure
+RestartSec=5
+
+# Hardening (compatible with /opt layout)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/libmyown/data
+
+[Install]
+WantedBy=multi-user.target
