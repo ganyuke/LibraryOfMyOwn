@@ -55,7 +55,7 @@ def main() -> int:
     git_password = settings.secrets.git_password
 
     checks = [
-        ("/", 200, "Library of My Own"),
+        ("/", 200, "Works"),
         ("/works/series/the-long-draft", 200, "The Long Draft"),
         ("/works/series/the-long-draft/history", 200, "History"),
         ("/works/series/the-long-draft/history", 200, "Compare selected revisions"),

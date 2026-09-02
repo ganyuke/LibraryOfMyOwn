@@ -6,7 +6,7 @@
 <link rel="canonical" href="{{ origin }}/works/{{ work.slug }}">
 {% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(site_title, "/"), (work.title, "/works/" ~ work.slug), ("History", None)]) }}
+{{ crumbs([(home_label, "/"), (work.title, "/works/" ~ work.slug), ("History", None)]) }}
 {% endblock %}
 {% block content %}
 <h1>History</h1>

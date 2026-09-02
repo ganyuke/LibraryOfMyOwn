@@ -12,21 +12,26 @@
 <body>
   <header class="site-header">
     <div class="site-shell">
-      <nav class="site-nav">
-        <a href="/">{{ site_title }}</a>
-        {% if is_admin %}
-          <a href="/admin">Admin</a>
-          <form class="inline" method="post" action="/logout">{{ csrf_field(csrf_token) }}<button type="submit">Log out</button></form>
-        {% elif show_login_link %}
-          <a href="/login">Log in</a>
-        {% endif %}
-        <form class="inline theme-toggle" method="post" action="/theme">
-          {{ csrf_field(csrf_token) }}
-          <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
-          <button type="submit" name="theme" value="{{ 'light' if theme == 'dark' else 'dark' }}">
-            {% if theme == 'dark' %}Light mode{% else %}Dark mode{% endif %}
-          </button>
-        </form>
+      <nav class="site-nav" aria-label="Site">
+        <div class="site-nav-primary">
+          <a href="/">{{ home_label }}</a>
+          {% if is_admin %}
+            <a href="/admin">Admin</a>
+            <form class="inline" method="post" action="/logout">{{ csrf_field(csrf_token) }}<button type="submit">Log out</button></form>
+          {% elif show_login_link %}
+            <a href="/login">Log in</a>
+          {% endif %}
+        </div>
+        <div class="site-nav-secondary">
+          <a href="{{ source_repo_url }}" class="site-nav-meta">{{ app_label }}</a>
+          <form class="inline theme-toggle" method="post" action="/theme">
+            {{ csrf_field(csrf_token) }}
+            <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+            <button type="submit" name="theme" value="{{ 'light' if theme == 'dark' else 'dark' }}">
+              {% if theme == 'dark' %}Light mode{% else %}Dark mode{% endif %}
+            </button>
+          </form>
+        </div>
       </nav>
     </div>
   </header>

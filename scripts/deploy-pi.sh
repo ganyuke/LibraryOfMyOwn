@@ -178,5 +178,5 @@ echo
 echo "Next steps:"
 echo "  1. Edit $APP_DIR/.env if needed (paths only; secrets auto-generate on first start)"
 echo "  2. sudo systemctl restart libmyown"
-echo "  3. Open https://your.domain/setup in a browser"
+echo "  3. Open /setup in a browser"
 echo "  4. Point Caddy at 127.0.0.1:8000 (see examples/caddy/Caddyfile)"

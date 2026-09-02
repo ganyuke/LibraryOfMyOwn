@@ -45,7 +45,10 @@ from libmyown.git_repo import StoriesRepo
 from libmyown.pdf import discover_pdf_options, generate_pdf
 from libmyown.service import LibraryService
 from libmyown.site_config import (
+    APP_LABEL,
     DEFAULT_SITE_TITLE,
+    HOME_LABEL,
+    SOURCE_REPO_URL,
     SiteConfig,
     StoryContinuity,
     FlagDef,
@@ -133,6 +136,9 @@ def create_app(settings: Settings | None = None) -> Starlette:
         ctx = {
             "origin": request_origin(request, site),
             "site_title": site.site_title,
+            "home_label": HOME_LABEL,
+            "source_repo_url": SOURCE_REPO_URL,
+            "app_label": APP_LABEL,
             "show_login_link": site.show_login_link,
             "robots_noindex": site.robots_noindex,
             "is_admin": is_admin(request),
@@ -158,7 +164,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             view.commit_sha and head_sha and view.commit_sha != head_sha
         )
         breadcrumb_items: list[tuple[str, str | None]] = [
-            (get_site().site_title, "/"),
+            (HOME_LABEL, "/"),
             (view.meta.title, f"/works/{view.slug}"),
         ]
         if viewing_revision:

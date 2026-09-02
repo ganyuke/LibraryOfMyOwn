@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex">
 {% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Security", None)]) }}
+{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Security", None)]) }}
 {% endblock %}
 {% block content %}
 <h1>Security</h1>
@@ -20,9 +20,7 @@
     <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url">
     <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
   </div>
-  <p class="form-hint">Update your local git remote after regenerating.</p>
   {% else %}
-  <p>Password is stored in <code>data/secrets.json</code>. Regenerate if it may have leaked.</p>
   <form method="post" class="inline">
     {{ csrf_field(csrf_token) }}
     <input type="hidden" name="action" value="regenerate_git_password">
@@ -57,7 +55,6 @@
   <input type="hidden" name="action" value="rotate_sessions">
   <fieldset class="admin-panel">
     <legend>Sessions</legend>
-    <p>Invalidate all admin sessions (including this one) by rotating the session signing key.</p>
     <button type="submit" class="admin-btn">Log everyone out</button>
   </fieldset>
 </form>

@@ -2,7 +2,7 @@
 {% from "macros.html" import crumbs %}
 {% block title %}{{ title }}{% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(site_title, "/"), (title, None)]) }}
+{{ crumbs([(home_label, "/"), (title, None)]) }}
 {% endblock %}
 {% block content %}
 <h1>{{ title }}</h1>

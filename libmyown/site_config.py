@@ -17,6 +17,9 @@ class StoryContinuity:
 DEFAULT_FLAG_LABELS = {"wip": "WIP"}
 DEFAULT_FLAG_COLORS = {"wip": "#8a6d00"}
 DEFAULT_SITE_TITLE = "Library of My Own"
+APP_LABEL = "Library of My Own"
+HOME_LABEL = "Works"
+SOURCE_REPO_URL = "https://github.com/ganyuke/LibraryOfMyOwn"
 
 
 @dataclass

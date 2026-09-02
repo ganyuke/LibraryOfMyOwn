@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex">
 {% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Site", None)]) }}
+{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Site", None)]) }}
 {% endblock %}
 {% block content %}
 <h1>Site settings</h1>
@@ -15,9 +15,8 @@
     <legend>Public URL</legend>
     <label>
       <span class="visually-hidden">Public site URL</span>
-      <input type="url" name="public_url" value="{{ site.public_url }}" placeholder="https://your.domain">
+      <input type="url" name="public_url" value="{{ site.public_url }}">
     </label>
-    <p class="form-hint">Canonical and Open Graph links. Leave blank to infer from each request.</p>
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Site title</legend>
@@ -36,7 +35,6 @@
       <input type="text" readonly value="{{ git_remote_url }}" id="git-remote-url" class="git-remote-url">
       <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-remote-url">Copy URL</button>
     </div>
-    <p class="form-hint">Push password is on <a href="/admin/security">Security</a>.</p>
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Stories branch</legend>
@@ -44,7 +42,6 @@
       <span class="visually-hidden">Stories branch</span>
       <input type="text" name="stories_branch" value="{{ site.stories_branch }}" placeholder="{{ active_branch or 'HEAD' }}">
     </label>
-    <p class="form-hint">Branch the site reads. Empty follows the bare repo HEAD{% if active_branch %} (currently <code>{{ active_branch }}</code>){% endif %}.</p>
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Privacy</legend>

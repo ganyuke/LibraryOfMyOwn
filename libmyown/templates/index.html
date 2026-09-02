@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import work_flags %}
-{% block title %}{{ site_title }}{% endblock %}
+{% block title %}{{ home_label }}{% endblock %}
 {% block head_meta %}
 {% if robots_noindex %}<meta name="robots" content="noindex">{% endif %}
 <meta name="description" content="Stories from {{ site_title }}.">
@@ -10,7 +10,7 @@
 <meta property="og:url" content="{{ origin }}/">
 {% endblock %}
 {% block content %}
-<h1>{{ site_title }}</h1>
+<h1>{{ home_label }}</h1>
 {% if works %}
 <table class="work-list">
   <thead>

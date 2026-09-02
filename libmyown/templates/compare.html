@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex">
 {% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(site_title, "/"), (work.title, "/works/" ~ work.slug), ("History", "/works/" ~ work.slug ~ "/history"), ("Compare", None)]) }}
+{{ crumbs([(home_label, "/"), (work.title, "/works/" ~ work.slug), ("History", "/works/" ~ work.slug ~ "/history"), ("Compare", None)]) }}
 {% endblock %}
 {% block content %}
 <div class="history-diff-header">
