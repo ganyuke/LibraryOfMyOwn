@@ -114,7 +114,7 @@ def make_typst_document_digital(body_typ: str, metadata: dict[str, str]) -> str:
   ),
   header: context {{
     set text(size: 6.5pt)
-    align(center)[counter(page).display("1 / 1", both: true)]
+    align(center)[#counter(page).display("1 / 1", both: true)]
   }},
 )
 

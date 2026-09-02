@@ -15,6 +15,11 @@ class TypstTemplateTests(unittest.TestCase):
         self.assertNotIn("binding: left", doc)
         self.assertNotIn("inside:", doc)
 
+    def test_digital_page_number_is_typst_code_not_literal_text(self) -> None:
+        doc = make_typst_document_digital("body", {"title": "Example"})
+        self.assertIn("[#counter(page).display(", doc)
+        self.assertNotIn("[counter(page).display(", doc)
+
     def test_print_has_binding_gutter(self) -> None:
         doc = make_typst_document_print("body", {"title": "Example"})
         self.assertIn("binding: left", doc)
