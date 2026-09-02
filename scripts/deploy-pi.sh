@@ -47,8 +47,8 @@ default_repo_url() {
   if [[ -f "$script_path" ]]; then
     local script_root
     script_root="$(cd "$(dirname "$script_path")/.." && pwd)"
-    if git -C "$script_root" rev-parse --is-inside-work-tree &>/dev/null; then
-      git -C "$script_root" remote get-url origin 2>/dev/null && return
+    if git -c "safe.directory=$script_root" -C "$script_root" rev-parse --is-inside-work-tree &>/dev/null; then
+      git -c "safe.directory=$script_root" -C "$script_root" remote get-url origin 2>/dev/null && return
     fi
   fi
   printf '%s\n' "$DEFAULT_REPO_URL"
@@ -62,6 +62,10 @@ need_cmd python3
 need_cmd install
 need_cmd git
 need_cmd rsync
+
+git_app() {
+  git -c "safe.directory=$APP_DIR" -C "$APP_DIR" "$@"
+}
 
 python_version() {
   python3 - <<'PY'
@@ -107,15 +111,17 @@ install -m 755 "$pandoc_bin" "$BIN_DIR/pandoc"
 
 echo "==> Application source ($REPO_URL @ $GIT_REF)"
 if [[ -d "$APP_DIR/.git" ]]; then
-  git -C "$APP_DIR" fetch origin
-  git -C "$APP_DIR" checkout "$GIT_REF"
-  git -C "$APP_DIR" pull --ff-only origin "$GIT_REF"
+  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
+  git_app fetch origin
+  git_app checkout "$GIT_REF"
+  git_app pull --ff-only origin "$GIT_REF"
 elif [[ -d "$APP_DIR" ]] && [[ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]]; then
   echo "$APP_DIR exists but is not a git checkout. Move it aside or remove it, then re-run." >&2
   exit 1
 else
   install -d -m 755 "$(dirname "$APP_DIR")"
   git clone --branch "$GIT_REF" "$REPO_URL" "$APP_DIR"
+  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
 fi
 
 if [[ ! -f "$APP_DIR/requirements.txt" ]]; then
