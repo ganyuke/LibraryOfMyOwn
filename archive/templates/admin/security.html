@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Security{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Security", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Security</h1>
+{% if message %}<p class="notice">{{ message }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<fieldset class="admin-panel">
+  <legend>Git push password</legend>
+  {% if revealed_git_password %}
+  <p class="notice">Copy this password now. It will not be shown again.</p>
+  <div class="git-remote-row">
+    <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url">
+    <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
+  </div>
+  <p class="form-hint">Update your local git remote after regenerating.</p>
+  {% else %}
+  <p>Password is stored in <code>data/secrets.json</code>. Regenerate if it may have leaked.</p>
+  <form method="post" class="inline">
+    {{ csrf_field(csrf_token) }}
+    <input type="hidden" name="action" value="regenerate_git_password">
+    <button type="submit" class="admin-btn">Regenerate git password</button>
+  </form>
+  {% endif %}
+</fieldset>
+
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="action" value="change_admin_password">
+  <fieldset class="admin-panel">
+    <legend>Change admin password</legend>
+    <label>
+      Current password
+      <input type="password" name="current_password" required autocomplete="current-password">
+    </label>
+    <label>
+      New password
+      <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label>
+      Confirm new password
+      <input type="password" name="new_password_confirm" required minlength="8" autocomplete="new-password">
+    </label>
+  </fieldset>
+  <p><button type="submit">Update admin password</button></p>
+</form>
+
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="action" value="rotate_sessions">
+  <fieldset class="admin-panel">
+    <legend>Sessions</legend>
+    <p>Invalidate all admin sessions (including this one) by rotating the session signing key.</p>
+    <button type="submit" class="admin-btn">Log everyone out</button>
+  </fieldset>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll(".git-remote-copy").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const input = document.getElementById(button.dataset.copyTarget);
+    if (!input) {
+      return;
+    }
+    const value = input.value;
+    const done = function () {
+      const label = button.textContent;
+      button.textContent = "Copied";
+      window.setTimeout(function () {
+        button.textContent = label;
+      }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(done);
+      return;
+    }
+    input.select();
+    input.setSelectionRange(0, value.length);
+    document.execCommand("copy");
+    done();
+  });
+});
+</script>
+{% endblock %}

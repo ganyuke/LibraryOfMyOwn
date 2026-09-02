@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}Compare · {{ work.title }}{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), (work.title, "/works/" ~ work.slug), ("History", "/works/" ~ work.slug ~ "/history"), ("Compare", None)]) }}
+{% endblock %}
+{% block content %}
+<div class="history-diff-header">
+  <h1 class="compare-heading">
+    Changes from <a href="/works/{{ work.slug }}/r/{{ old_rev }}">{{ old_rev }}</a>
+    to <a href="/works/{{ work.slug }}/r/{{ new_rev }}">{{ new_rev }}</a>{% if byte_summary %} <span class="compare-bytes">{{ byte_summary | safe }}</span>{% endif %}
+  </h1>
+  <nav class="diff-view-toggle" aria-label="Diff view">
+    {% for mode, label in [('immersive', 'Immersive'), ('split', 'Split'), ('unified', 'Unified')] %}
+    {% if diff_view == mode %}
+    <span class="diff-view-active">{{ label }}</span>
+    {% else %}
+    <a href="?old={{ old_rev }}&amp;new={{ new_rev }}&amp;diff_view={{ mode }}">{{ label }}</a>
+    {% endif %}
+    {% if not loop.last %}<span class="diff-view-sep">·</span>{% endif %}
+    {% endfor %}
+  </nav>
+</div>
+{% if diff_html %}
+<div class="diff-wrap{% if diff_view == 'immersive' %} diff-wrap-immersive{% endif %}">
+  {% if diff_view == 'immersive' %}
+  <div class="diff userstuff diff-immersive">{{ diff_html | safe }}</div>
+  {% else %}
+  {{ diff_html | safe }}
+  {% endif %}
+</div>
+{% else %}
+<p class="history-diff-empty">No text changes between these revisions.</p>
+{% endif %}
+{% endblock %}

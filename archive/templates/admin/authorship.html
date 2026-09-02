@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Authorship{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Authorship", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Authorship</h1>
+
+<form method="post" class="admin-form authorship-form">
+  {{ csrf_field(csrf_token) }}
+  <fieldset class="admin-panel">
+    <legend>Site-wide default author</legend>
+    <label class="authorship-default-author">
+      <span class="visually-hidden">Site-wide default author</span>
+      <input type="text" name="default_author" value="{{ default_author }}">
+    </label>
+  </fieldset>
+
+  <fieldset class="admin-panel">
+    <legend>Primary author per work</legend>
+    {% if paths %}
+    <div class="authorship-works">
+      <div class="authorship-works-head">
+        <span>Work</span>
+        <span>Source</span>
+        <span>Override</span>
+      </div>
+      {% for path in paths %}
+      <div class="authorship-work-row">
+        <code class="authorship-work-path">{{ path }}</code>
+        <label>
+          <span class="visually-hidden">Author source for {{ path }}</span>
+          <input type="hidden" name="work_path" value="{{ path }}">
+          <select name="work_mode">
+            <option value="default" {% if work_author_mode.get(path, 'default') != 'earliest' %}selected{% endif %}>Default</option>
+            <option value="earliest" {% if work_author_mode.get(path) == 'earliest' %}selected{% endif %}>Earliest commit</option>
+          </select>
+        </label>
+        <label>
+          <span class="visually-hidden">Author override for {{ path }}</span>
+          <input type="text" name="work_override" value="{{ work_author_override.get(path, '') }}">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p>No works in the repository.</p>
+    {% endif %}
+  </fieldset>
+
+  <fieldset class="admin-panel">
+    <legend>Git author masking</legend>
+    {% if identities %}
+    <div class="authorship-identities">
+      <div class="authorship-identities-head">
+        <span>Git identity</span>
+        <span>Display as</span>
+      </div>
+      {% for identity in identities %}
+      <div class="authorship-identity-row">
+        <code class="authorship-identity">{{ identity }}</code>
+        <label>
+          <span class="visually-hidden">Display name for {{ identity }}</span>
+          <input type="hidden" name="identity" value="{{ identity }}">
+          <input type="text" name="alias" value="{{ author_aliases.get(identity, '') }}">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p>No git authors found yet.</p>
+    {% endif %}
+  </fieldset>
+
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
+</form>
+{% endblock %}

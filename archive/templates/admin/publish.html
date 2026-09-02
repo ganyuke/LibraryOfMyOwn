@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Publish works{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Publish", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Publish works</h1>
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <fieldset class="admin-panel">
+    <legend>Individual files</legend>
+    {% for path in paths %}
+    <label class="checkbox-row">
+      <input type="checkbox" name="path" value="{{ path }}" {% if path in published_paths %}checked{% endif %}>
+      {{ path }}
+    </label>
+    {% endfor %}
+  </fieldset>
+  <fieldset class="admin-panel">
+    <legend>Entire folders</legend>
+    {% for directory in directories %}
+    <label class="checkbox-row">
+      <input type="checkbox" name="directory" value="{{ directory }}/" {% if (directory ~ '/') in published_directories or directory in published_directories %}checked{% endif %}>
+      {{ directory }}/
+    </label>
+    {% endfor %}
+  </fieldset>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
+</form>
+{% endblock %}

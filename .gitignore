@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/*
+!data/site.json.example
+data/seed-worktree/
+OPERATOR.md
+*.egg-info/
+.pytest_cache/

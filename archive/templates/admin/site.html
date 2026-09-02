@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Site settings{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Site", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Site settings</h1>
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <fieldset class="admin-panel">
+    <legend>Public URL</legend>
+    <label>
+      <span class="visually-hidden">Public site URL</span>
+      <input type="url" name="public_url" value="{{ site.public_url }}" placeholder="https://your.domain">
+    </label>
+    <p class="form-hint">Canonical and Open Graph links. Leave blank to infer from each request.</p>
+  </fieldset>
+  <fieldset class="admin-panel">
+    <legend>Site title</legend>
+    <label>
+      <span class="visually-hidden">Site title</span>
+      <input type="text" name="site_title" value="{{ site.site_title }}" placeholder="Library of My Own">
+    </label>
+  </fieldset>
+  <fieldset class="admin-panel">
+    <legend>Git remote</legend>
+    <label>
+      Git username
+      <input type="text" name="git_username" value="{{ git_username }}">
+    </label>
+    <div class="git-remote-row">
+      <input type="text" readonly value="{{ git_remote_url }}" id="git-remote-url" class="git-remote-url">
+      <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-remote-url">Copy URL</button>
+    </div>
+    <p class="form-hint">Push password is on <a href="/admin/security">Security</a>.</p>
+  </fieldset>
+  <fieldset class="admin-panel">
+    <legend>Stories branch</legend>
+    <label>
+      <span class="visually-hidden">Stories branch</span>
+      <input type="text" name="stories_branch" value="{{ site.stories_branch }}" placeholder="{{ active_branch or 'HEAD' }}">
+    </label>
+    <p class="form-hint">Branch the site reads. Empty follows the bare repo HEAD{% if active_branch %} (currently <code>{{ active_branch }}</code>){% endif %}.</p>
+  </fieldset>
+  <fieldset class="admin-panel">
+    <legend>Privacy</legend>
+    <label class="checkbox-row">
+      <input type="checkbox" name="show_login_link" {% if site.show_login_link %}checked{% endif %}>
+      Show log in link on public pages
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="expose_unpublished_continuity_titles" {% if site.expose_unpublished_continuity_titles %}checked{% endif %}>
+      Show unpublished continuity story titles
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="public_history" {% if site.public_history %}checked{% endif %}>
+      Show commit authors and messages on public history pages
+    </label>
+    <label class="checkbox-row">
+      <input type="checkbox" name="robots_noindex" {% if site.robots_noindex %}checked{% endif %}>
+      Ask search engines not to index the site
+    </label>
+  </fieldset>
+  <p><button type="submit">Save site settings</button></p>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll(".git-remote-copy").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const input = document.getElementById(button.dataset.copyTarget);
+    if (!input) {
+      return;
+    }
+    const value = input.value;
+    const done = function () {
+      const label = button.textContent;
+      button.textContent = "Copied";
+      window.setTimeout(function () {
+        button.textContent = label;
+      }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(done);
+      return;
+    }
+    input.select();
+    input.setSelectionRange(0, value.length);
+    document.execCommand("copy");
+    done();
+  });
+});
+</script>
+{% endblock %}

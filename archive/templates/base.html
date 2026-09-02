@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+{% from "macros.html" import csrf_field %}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  {% if robots_noindex %}<meta name="robots" content="noindex">{% endif %}
+  {% block head_meta %}{% endblock %}
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-shell">
+      <nav class="site-nav">
+        <a href="/">{{ site_title }}</a>
+        {% if is_admin %}
+          <a href="/admin">Admin</a>
+          <form class="inline" method="post" action="/logout">{{ csrf_field(csrf_token) }}<button type="submit">Log out</button></form>
+        {% elif show_login_link %}
+          <a href="/login">Log in</a>
+        {% endif %}
+        <form class="inline theme-toggle" method="post" action="/theme">
+          {{ csrf_field(csrf_token) }}
+          <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          <button type="submit" name="theme" value="{{ 'light' if theme == 'dark' else 'dark' }}">
+            {% if theme == 'dark' %}Light mode{% else %}Dark mode{% endif %}
+          </button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  <main class="site-shell content">
+    {% block breadcrumbs %}{% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

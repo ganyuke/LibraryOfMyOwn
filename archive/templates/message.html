@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}{{ title }}{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), (title, None)]) }}
+{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p>{{ message }}</p>
+{% endblock %}

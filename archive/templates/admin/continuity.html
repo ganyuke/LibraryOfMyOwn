@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Continuity{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Continuity", None)]) }}
+{% endblock %}
+{% block content %}
+<div class="continuity-admin">
+<h1>Continuity</h1>
+
+<form method="get" class="admin-form continuity-form">
+  <fieldset class="admin-panel">
+    <legend>Story</legend>
+    <label>
+      <span class="visually-hidden">Story</span>
+      <select name="story" onchange="this.form.submit()">
+        <option value="">Choose a story…</option>
+        {% for story in stories %}
+        <option value="{{ story.slug }}" {% if story.slug == selected_slug %}selected{% endif %}>{{ story.title }} ({{ story.path }})</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+</form>
+
+{% if selected_path %}
+<form method="post" class="admin-form continuity-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="story_path" value="{{ selected_path }}">
+  <div class="admin-panels-grid">
+    <fieldset class="admin-panel">
+      <legend>Previous</legend>
+      <div class="admin-choice-list">
+        {% for story in stories if story.path != selected_path %}
+        <label class="admin-choice">
+          <input type="checkbox" name="previous" value="{{ story.path }}" {% if story.path in selected_previous %}checked{% endif %}>
+          <span class="admin-choice-title">{{ story.title }}{% if not story.published %}<span class="continuity-admin-unpublished">(unpublished)</span>{% endif %}</span>
+          <span class="admin-choice-path">{{ story.path }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset class="admin-panel">
+      <legend>Next</legend>
+      <div class="admin-choice-list">
+        {% for story in stories if story.path != selected_path %}
+        <label class="admin-choice">
+          <input type="checkbox" name="next" value="{{ story.path }}" {% if story.path in selected_next %}checked{% endif %}>
+          <span class="admin-choice-title">{{ story.title }}{% if not story.published %}<span class="continuity-admin-unpublished">(unpublished)</span>{% endif %}</span>
+          <span class="admin-choice-path">{{ story.path }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+  </div>
+  <p class="admin-continuity-note">Titles of unpublished works will be shown greyed out in the footer of this story.</p>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save links</button>
+  </p>
+</form>
+{% endif %}
+</div>
+{% endblock %}

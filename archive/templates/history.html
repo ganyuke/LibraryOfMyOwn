@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs %}
+{% block title %}History · {{ work.title }}{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+<link rel="canonical" href="{{ origin }}/works/{{ work.slug }}">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), (work.title, "/works/" ~ work.slug), ("History", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>History</h1>
+{% if history %}
+<form method="get" action="/works/{{ work.slug }}/history/compare" class="history-form">
+  <table class="history-list">
+    <thead>
+      <tr>
+        <th>Older</th>
+        <th>Newer</th>
+        <th>Revision</th>
+        <th>Date</th>
+        {% if show_history_details %}
+        <th>Author</th>
+        <th>Message</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in history %}
+      {% set rev = entry.revision %}
+      <tr>
+        <td class="history-radio">
+          {% if not loop.first %}
+          <input type="radio" name="old" value="{{ rev.short_sha }}" {% if rev.short_sha == old_rev %}checked{% endif %} aria-label="Older revision {{ rev.short_sha }}">
+          {% endif %}
+        </td>
+        <td class="history-radio">
+          {% if not loop.last %}
+          <input type="radio" name="new" value="{{ rev.short_sha }}" {% if rev.short_sha == new_rev %}checked{% endif %} aria-label="Newer revision {{ rev.short_sha }}">
+          {% endif %}
+        </td>
+        <td>
+          <a href="/works/{{ work.slug }}/r/{{ rev.short_sha }}">{{ rev.short_sha }}</a>
+          {% if entry.path != work.path %}
+          <span class="history-source">{{ entry.path }}</span>
+          {% endif %}
+        </td>
+        <td>{{ rev.committed_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+        {% if show_history_details %}
+        <td>{{ service.display_revision_author(rev) }}</td>
+        <td>{{ rev.message }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="history-actions">
+    <button type="submit">Compare selected revisions</button>
+  </p>
+</form>
+{% else %}
+<p>No revisions found.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, work_flags %}
+{% block title %}{{ work.meta.title }}{% endblock %}
+{% block head_meta %}
+{% if work_blurb %}
+<meta name="description" content="{{ work_blurb }}">
+<meta property="og:description" content="{{ work_blurb }}">
+{% endif %}
+<meta name="author" content="{{ work.author }}">
+<link rel="canonical" href="{{ origin }}/works/{{ work.slug }}">
+<meta property="og:title" content="{{ work.meta.title }}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="{{ origin }}/works/{{ work.slug }}">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs(breadcrumb_items) }}
+{% endblock %}
+{% block content %}
+<article class="work" data-read-slug="{{ work.slug }}">
+  <header class="work-header">
+    {% if work.path_prefix %}<p class="work-path">{{ work.path_prefix }}</p>{% endif %}
+    <h1 class="work-title">
+      <span class="work-title-text">{{ work.meta.title }}</span>{{ work_flags(work.flags, flags) }}
+    </h1>
+    <p class="meta-line">
+      by {{ work.author }} · {{ work.words_display }} words
+      {% if work.updated_display %}
+      · Updated {{ work.updated_display }}
+      (<a href="/works/{{ work.slug }}/history" class="meta-date" title="{{ work.updated_tooltip }}">history</a>)
+      {% endif %}
+    </p>
+    {% if work_blurb %}<p class="work-blurb">{{ work_blurb }}</p>{% endif %}
+    {% if meta_rows %}
+    <dl class="work-meta">
+      {% for label, value in meta_rows %}
+      <div class="work-meta-row">
+        <dt>{{ label }}</dt>
+        <dd>{{ value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+    {% endif %}
+    {% if work.meta.characters or pdf_options %}
+    <div class="work-panels">
+      {% if work.meta.characters %}
+      <fieldset class="admin-panel work-panel">
+        <legend>Characters</legend>
+        <ul class="work-panel-list">
+          {% for name, desc in work.meta.characters %}
+          <li><strong>{{ name }}</strong>{% if desc %} — {{ desc }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </fieldset>
+      {% endif %}
+      {% if pdf_options %}
+      <fieldset class="admin-panel work-panel">
+        <legend>Download</legend>
+        <ul class="work-panel-list">
+          {% for opt in pdf_options %}
+          <li>
+            <a href="/works/{{ work.slug }}/pdf/{{ opt.id }}{% if work.commit_sha %}?rev={{ work.commit_sha }}{% endif %}">{{ opt.label }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+      </fieldset>
+      {% endif %}
+    </div>
+    {% endif %}
+  </header>
+  <div class="work-reading">
+    <div class="work-body userstuff">
+      {{ work.meta.body_html | safe }}
+    </div>
+    <aside class="read-aside" hidden>
+      <button type="button" class="read-pin" aria-label="Back to top">
+        <span class="read-pin-ring" aria-hidden="true"></span>
+        <span class="read-pin-arrow" aria-hidden="true">↑</span>
+      </button>
+    </aside>
+  </div>
+  <footer class="work-footer">
+    {% if continuity.previous or continuity.next %}
+    <nav class="work-footer-nav" aria-label="Continuity">
+      {% if continuity.previous %}
+      <section class="work-footer-group">
+        <h2 class="work-footer-heading">Previous</h2>
+        <ul class="work-footer-list">
+          {% for item in continuity.previous %}
+          <li>
+            {% if item.slug %}
+            <a href="/works/{{ item.slug }}">{{ item.title }}</a>
+            {% else %}
+            <span class="continuity-unpublished">{{ item.title }}</span><span class="continuity-unpublished-tag">(unpublished)</span>
+            {% endif %}
+            {{ work_flags(item.flags, flags) }}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+      {% if continuity.next %}
+      <section class="work-footer-group">
+        <h2 class="work-footer-heading">Next</h2>
+        <ul class="work-footer-list">
+          {% for item in continuity.next %}
+          <li>
+            {% if item.slug %}
+            <a href="/works/{{ item.slug }}">{{ item.title }}</a>
+            {% else %}
+            <span class="continuity-unpublished">{{ item.title }}</span><span class="continuity-unpublished-tag">(unpublished)</span>
+            {% endif %}
+            {{ work_flags(item.flags, flags) }}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+    </nav>
+    {% endif %}
+    {% if related_works %}
+    <section class="work-footer-related">
+      <h2 class="work-footer-heading">
+        {% if work.path_prefix %}More in {{ work.path_prefix.rstrip('/') }}{% else %}More works{% endif %}
+      </h2>
+      <ul class="work-footer-list">
+        {% for item in related_works %}
+        <li><a href="/works/{{ item.slug }}">{{ item.title }}</a>{{ work_flags(item.flags, flags) }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    <p class="work-footer-back"><a href="/">← {{ site_title }}</a></p>
+  </footer>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="/static/reading-progress.js" defer></script>
+{% endblock %}

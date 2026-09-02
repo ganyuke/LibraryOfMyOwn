@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Merge histories{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Merge histories", None)]) }}
+{% endblock %}
+{% block content %}
+<div class="admin-stack">
+<h1>Merge histories</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="action" value="merge">
+  <fieldset class="admin-panel">
+    <legend>Merge</legend>
+    <label>
+      Source
+      <input name="source" list="history-source-paths" required {% if source %}value="{{ source }}"{% endif %}>
+      <datalist id="history-source-paths">
+        {% for path in paths %}
+        <option value="{{ path }}">
+        {% endfor %}
+        {% for path in historical_paths %}
+        <option value="{{ path }}">
+        {% endfor %}
+      </datalist>
+    </label>
+    <label>
+      Destination
+      <select name="dest" required>
+        <option value="" disabled {% if not dest %}selected{% endif %}>Choose…</option>
+        {% for path in paths %}
+        <option value="{{ path }}" {% if path == dest %}selected{% endif %}>{{ path }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Merge</button>
+  </p>
+</form>
+{% if history_merges %}
+<fieldset class="admin-panel">
+  <legend>Merges</legend>
+  <ul class="admin-list">
+    {% for dest, sources in history_merges.items() %}
+    {% for source in sources %}
+    <li class="admin-list-item">
+      <span class="admin-list-item-body"><strong>{{ dest }}</strong> ← {{ source }}</span>
+      <form method="post" class="admin-list-item-action">
+        {{ csrf_field(csrf_token) }}
+        <input type="hidden" name="action" value="unmerge">
+        <input type="hidden" name="source" value="{{ source }}">
+        <input type="hidden" name="dest" value="{{ dest }}">
+        <button type="submit" class="admin-btn admin-btn--remove">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+    {% endfor %}
+  </ul>
+</fieldset>
+{% endif %}
+{% if slug_redirects %}
+<fieldset class="admin-panel">
+  <legend>Redirects</legend>
+  <ul class="admin-list">
+    {% for old_slug, new_slug in slug_redirects.items() %}
+    <li class="admin-list-item">
+      <span class="admin-list-item-body"><code>{{ old_slug }}</code> → <code>{{ new_slug }}</code></span>
+    </li>
+    {% endfor %}
+  </ul>
+</fieldset>
+{% endif %}
+</div>
+{% endblock %}

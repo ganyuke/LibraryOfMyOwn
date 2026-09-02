@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Work metadata{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Metadata", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Work metadata</h1>
+
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <fieldset class="admin-panel">
+    <legend>Blurb fields</legend>
+    <textarea name="blurb_fields" rows="4" class="admin-lines" aria-label="Blurb fields">{{ blurb_fields | join('\n') }}</textarea>
+  </fieldset>
+
+  <fieldset class="admin-panel">
+    <legend>Display order</legend>
+    <textarea name="field_order" rows="8" class="admin-lines" aria-label="Display order">{{ field_order | join('\n') }}</textarea>
+  </fieldset>
+
+  {% if discovered_fields %}
+  <fieldset class="admin-panel">
+    <legend>Seen keys</legend>
+    <ul class="admin-list metadata-key-list">
+      {% for field in discovered_fields %}
+      <li><code>{{ field }}</code></li>
+      {% endfor %}
+    </ul>
+  </fieldset>
+  {% endif %}
+
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
+</form>
+{% endblock %}

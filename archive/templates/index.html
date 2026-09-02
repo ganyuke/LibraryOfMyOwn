@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import work_flags %}
+{% block title %}{{ site_title }}{% endblock %}
+{% block head_meta %}
+{% if robots_noindex %}<meta name="robots" content="noindex">{% endif %}
+<meta name="description" content="Stories from {{ site_title }}.">
+<link rel="canonical" href="{{ origin }}/">
+<meta property="og:title" content="{{ site_title }}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ origin }}/">
+{% endblock %}
+{% block content %}
+<h1>{{ site_title }}</h1>
+{% if works %}
+<table class="work-list">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Author</th>
+      <th>Words</th>
+      <th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for work in works %}
+    <tr>
+      <td>
+        {% if work.path_prefix %}<span class="work-path">{{ work.path_prefix }}</span>{% endif %}
+        <a href="/works/{{ work.slug }}" data-read-slug="{{ work.slug }}">{{ work.title }}</a>
+        {{ work_flags(work.flags, flags) }}
+      </td>
+      <td>{{ work.author }}</td>
+      <td>{{ work.words_display }}</td>
+      <td>
+        {% if work.updated_display %}
+        <a href="/works/{{ work.slug }}/history" class="meta-date" title="{{ work.updated_tooltip }}">{{ work.updated_display }}</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No stories are published yet.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/reading-progress.js" defer></script>
+{% endblock %}

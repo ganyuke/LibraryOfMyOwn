@@ -1,0 +1,22 @@
+{
+  "public_url": "",
+  "site_title": "Library of My Own",
+  "git_username": "git",
+  "stories_branch": "",
+  "show_login_link": true,
+  "expose_unpublished_continuity_titles": false,
+  "public_history": true,
+  "robots_noindex": false,
+  "published_paths": [],
+  "published_directories": [],
+  "suppressed_commits": {},
+  "history_merges": {},
+  "slug_redirects": {},
+  "flags": {
+    "wip": {"label": "WIP", "color": "#8a6d00"}
+  },
+  "work_flags": {},
+  "continuity": {},
+  "blurb_fields": ["summary"],
+  "field_order": ["rating", "warnings", "fandom", "language", "category", "relationships"]
+}

@@ -1,0 +1,33 @@
+# Append inside your Caddy site block (TLS + rate limits + reverse proxy).
+#
+# Build Caddy with: xcaddy build --with github.com/mholt/caddy-ratelimit
+# See examples/caddy/README.md
+
+# your.domain {
+#     @login path /login
+#     @git path /git/*
+#
+#     handle @login {
+#         rate_limit {
+#             zone login_per_ip {
+#                 key {remote_host}
+#                 events 10
+#                 window 1m
+#             }
+#         }
+#         reverse_proxy 127.0.0.1:8000
+#     }
+#
+#     handle @git {
+#         rate_limit {
+#             zone git_per_ip {
+#                 key {remote_host}
+#                 events 30
+#                 window 1m
+#             }
+#         }
+#         reverse_proxy 127.0.0.1:8000
+#     }
+#
+#     reverse_proxy 127.0.0.1:8000
+# }

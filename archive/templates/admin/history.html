@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Suppress revisions{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(site_title, "/"), ("Admin", "/admin"), ("Revisions", None)]) }}
+{% endblock %}
+{% block content %}
+<h1>Suppress revisions</h1>
+<form method="get" class="admin-form">
+  <fieldset class="admin-panel">
+    <legend>File</legend>
+    <label>
+      <span class="visually-hidden">File</span>
+      <select name="path" onchange="this.form.submit()">
+        {% for path in paths %}
+        <option value="{{ path }}" {% if path == selected_path %}selected{% endif %}>{{ path }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+</form>
+{% if selected_path %}
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="path" value="{{ selected_path }}">
+  <fieldset class="admin-panel">
+    <legend>{{ selected_path }}</legend>
+    {% for rev in history %}
+    <label class="checkbox-row {% if rev.sha in suppressed %}suppressed{% endif %}"{% if rev.sha == latest_sha %} title="The current revision cannot be suppressed"{% endif %}>
+      <input type="checkbox" name="suppressed" value="{{ rev.sha }}" {% if rev.sha in suppressed %}checked{% endif %}{% if rev.sha == latest_sha %} disabled title="The current revision cannot be suppressed"{% endif %}>
+      {{ rev.short_sha }} — {{ rev.committed_at.strftime('%Y-%m-%d %H:%M') }} — {{ rev.message }}
+    </label>
+    {% endfor %}
+  </fieldset>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
+</form>
+{% endif %}
+{% endblock %}

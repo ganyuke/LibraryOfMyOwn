@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block title %}Set up LibraryOfMyOwn{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block content %}
+<h1>Set up LibraryOfMyOwn</h1>
+<p>Create the admin password and confirm your public site URL. Secrets are stored in <code>data/secrets.json</code>.</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" class="simple-form setup-form">
+  {{ csrf_field(csrf_token) }}
+  <label>
+    Admin password
+    <input type="password" name="admin_password" required autofocus minlength="8">
+  </label>
+  <label>
+    Confirm admin password
+    <input type="password" name="admin_password_confirm" required minlength="8">
+  </label>
+  <label>
+    Public site URL
+    <input type="url" name="public_url" value="{{ suggested_public_url }}" required placeholder="https://your.domain">
+  </label>
+  <p class="form-hint">Used for canonical links, Open Graph tags, and the git remote URL shown in admin.</p>
+  <button type="submit">Finish setup</button>
+</form>
+{% endblock %}
