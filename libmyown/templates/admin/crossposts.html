@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import crumbs, csrf_field %}
+{% from "macros.html" import crumbs, csrf_field, admin_show_button %}
 {% block title %}Crossposts{% endblock %}
 {% block head_meta %}
 <meta name="robots" content="noindex">
@@ -23,6 +23,7 @@
         {% endfor %}
       </select>
     </label>
+    {{ admin_show_button() }}
   </fieldset>
 </form>
 {% endif %}

@@ -1226,6 +1226,10 @@ fieldset.work-panel {
   margin: 0;
 }
 
+html.js .admin-show-btn {
+  display: none;
+}
+
 .admin-panel {
   margin: 0;
   background: var(--surface);

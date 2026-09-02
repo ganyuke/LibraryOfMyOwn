@@ -18,6 +18,12 @@
 </nav>
 {% endmacro %}
 
+{% macro admin_show_button(label='Show') %}
+<p class="admin-actions">
+  <button type="submit" class="admin-btn admin-show-btn">{{ label }}</button>
+</p>
+{% endmacro %}
+
 {% macro work_flags(work_flag_ids, flags) %}
 {% for flag_id in work_flag_ids %}
 {% set flag = flags.get(flag_id) %}
