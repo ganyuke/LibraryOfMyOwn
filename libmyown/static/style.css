@@ -1011,8 +1011,6 @@ fieldset.work-panel {
   display: flex;
   flex-direction: row !important;
   align-items: center;
-  gap: 0.5rem !important;
-  margin: 0.35rem 0;
 }
 
 .simple-form button, .simple-form input, .simple-form select {
@@ -1235,7 +1233,6 @@ html.js .admin-show-btn {
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 fieldset.admin-panel {
