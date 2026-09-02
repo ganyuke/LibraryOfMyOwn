@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Maintenance{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Maintenance", None)]) }}
+{% endblock %}
+{% block content %}
+<div class="admin-page">
+  <h1>Maintenance</h1>
+  {% if message %}<p class="notice">{{ message }}</p>{% endif %}
+
+  <fieldset class="admin-panel">
+    <legend>PDF cache</legend>
+    <p>Generated PDFs are stored on disk so repeat downloads stay fast. Clear this after changing PDF scripts, fonts, or layout settings.</p>
+    <p>
+      {{ pdf_cache_entries }} cached work{{ "s" if pdf_cache_entries != 1 else "" }}
+      ({{ pdf_cache_size }} on disk)
+    </p>
+    <form method="post">
+      {{ csrf_field(csrf_token) }}
+      <input type="hidden" name="action" value="clear_pdf_cache">
+      <button type="submit" class="admin-btn">Clear PDF cache</button>
+    </form>
+  </fieldset>
+
+  <fieldset class="admin-panel">
+    <legend>Runtime caches</legend>
+    <p>In-memory caches for parsed markdown, git history, path listings, and the work index. These usually refresh on git push; clear manually if something looks stale after admin changes.</p>
+    <form method="post">
+      {{ csrf_field(csrf_token) }}
+      <input type="hidden" name="action" value="clear_runtime_caches">
+      <button type="submit" class="admin-btn">Clear runtime caches</button>
+    </form>
+  </fieldset>
+</div>
+{% endblock %}

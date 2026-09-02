@@ -24,6 +24,12 @@ from libmyown.auth import (
 )
 from libmyown.authorship import AUTHOR_MODE_EARLIEST
 from libmyown.csrf import CSRFMiddleware, get_csrf_token, get_form
+from libmyown.cache_tools import (
+    clear_pdf_cache,
+    clear_runtime_caches,
+    format_bytes,
+    pdf_cache_stats,
+)
 from libmyown.config import Settings, load_settings
 from libmyown.middleware import ForwardedProtoMiddleware, SetupRequiredMiddleware
 from libmyown.request_url import normalize_public_url, request_is_secure, request_origin
@@ -1048,6 +1054,40 @@ def create_app(settings: Settings | None = None) -> Starlette:
 
         return RedirectResponse("/admin/security", status_code=303)
 
+    async def admin_maintenance_get(request: Request) -> Response:
+        denied = require_admin(request)
+        if denied:
+            return denied
+        stats = pdf_cache_stats(settings.pdf_cache_dir)
+        return render(
+            request,
+            "admin/maintenance.html",
+            {
+                "pdf_cache_entries": stats.entries,
+                "pdf_cache_size": format_bytes(stats.bytes_on_disk),
+                "message": request.query_params.get("message", ""),
+            },
+        )
+
+    async def admin_maintenance_post(request: Request) -> Response:
+        denied = require_admin(request)
+        if denied:
+            return denied
+        form = await get_form(request)
+        action = str(form.get("action", ""))
+        if action == "clear_pdf_cache":
+            removed = clear_pdf_cache(settings.pdf_cache_dir)
+            message = f"Cleared {removed} PDF cache entr{'y' if removed == 1 else 'ies'}."
+        elif action == "clear_runtime_caches":
+            clear_runtime_caches(repo, work_index)
+            message = "Runtime caches cleared."
+        else:
+            return RedirectResponse("/admin/maintenance", status_code=303)
+        return RedirectResponse(
+            f"/admin/maintenance?{urlencode({'message': message})}",
+            status_code=303,
+        )
+
     def on_git_receive() -> None:
         repo.invalidate()
         site = get_site()
@@ -1084,6 +1124,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
         Route("/admin/site", admin_site_post, methods=["POST"]),
         Route("/admin/security", admin_security_get, methods=["GET"]),
         Route("/admin/security", admin_security_post, methods=["POST"]),
+        Route("/admin/maintenance", admin_maintenance_get, methods=["GET"]),
+        Route("/admin/maintenance", admin_maintenance_post, methods=["POST"]),
         Route("/admin/publish", admin_publish_get, methods=["GET"]),
         Route("/admin/publish", admin_publish_post, methods=["POST"]),
         Route("/admin/history", admin_history_get, methods=["GET"]),
