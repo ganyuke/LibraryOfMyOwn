@@ -6,9 +6,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from archive.secrets import Secrets, ensure_secrets
+from libmyown.secrets import Secrets, ensure_secrets
 
-# Load .env from the project root (parent of archive/).
+# Load .env from the project root (parent of libmyown/).
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(_PROJECT_ROOT / ".env")
 

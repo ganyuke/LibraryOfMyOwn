@@ -1,10 +1,10 @@
-"""Tests for archive.pdf_book typst templates."""
+"""Tests for libmyown.pdf_book typst templates."""
 
 from __future__ import annotations
 
 import unittest
 
-from archive.pdf_book.typst import make_typst_document_digital, make_typst_document_print
+from libmyown.pdf_book.typst import make_typst_document_digital, make_typst_document_print
 
 
 class TypstTemplateTests(unittest.TestCase):

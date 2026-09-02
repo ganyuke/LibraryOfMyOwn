@@ -6,7 +6,7 @@ from typing import Callable
 from dulwich.server import Backend
 from dulwich.web import make_wsgi_chain
 
-from archive.git_repo import StoriesRepo
+from libmyown.git_repo import StoriesRepo
 
 
 class SingleRepoBackend(Backend):

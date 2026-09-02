@@ -20,7 +20,7 @@ cd /path/to/LibraryOfMyOwn
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp examples/env.example .env
 ```
 
 `.env` only needs install paths (`DATA_DIR`, `HOST`, `PORT`). Cryptographic secrets are written to `data/secrets.json` on first start.
@@ -30,7 +30,7 @@ cp .env.example .env
 ```bash
 source .venv/bin/activate
 set -a && source .env && set +a
-python -m archive.main
+python -m libmyown.main
 ```
 
 Open http://127.0.0.1:8000 and complete **first-run setup** at `/setup` (admin password + public URL).
@@ -119,7 +119,7 @@ An example minimal builder lives at [`examples/pdf-scripts/plain.py`](examples/p
 
 ## HTTPS and rate limiting (Caddy)
 
-The repo `Caddyfile` shows TLS plus per-IP rate limits on `/login` and `/git/*`. It requires a custom Caddy build:
+[`examples/caddy/Caddyfile`](examples/caddy/Caddyfile) shows TLS plus per-IP rate limits on `/login` and `/git/*`. It requires a custom Caddy build:
 
 ```bash
 xcaddy build --with github.com/mholt/caddy-ratelimit
@@ -128,23 +128,35 @@ xcaddy build --with github.com/mholt/caddy-ratelimit
 See [`examples/caddy/README.md`](examples/caddy/README.md) for details. Run LibraryOfMyOwn on `127.0.0.1:8000`, then:
 
 ```bash
-sudo caddy run --config ./Caddyfile
+sudo caddy run --config examples/caddy/Caddyfile
 ```
 
 Caddy obtains Let's Encrypt certificates automatically and forwards `X-Forwarded-Proto` so the app can infer HTTPS for cookies. Optionally set `HTTPS_ENABLED=true` in `.env` to force `Secure` session cookies.
 
-## Raspberry Pi (`/opt/archive`)
+## Raspberry Pi (`/opt/libmyown`)
 
-On an aarch64 Pi, install everything under `/opt/archive` (app, venv, data, typst, pandoc):
+On an aarch64 Pi, install everything under `/opt/libmyown` (app, venv, data, typst, pandoc). The deploy script clones or updates from git — you do not need to copy the repo by hand.
+
+**Fresh Pi** (bootstrap from GitHub):
 
 ```bash
-# Copy or git clone the repo onto the Pi, then:
+curl -fsSL https://raw.githubusercontent.com/ganyuke/LibraryOfMyOwn/main/scripts/deploy-pi.sh | sudo bash
+```
+
+**Already have a clone** on the Pi:
+
+```bash
+cd LibraryOfMyOwn
 sudo ./scripts/deploy-pi.sh
 ```
 
-The script downloads [Typst 0.15.1](https://github.com/typst/typst/releases/download/v0.15.1/typst-aarch64-unknown-linux-musl.tar.xz) and [Pandoc 3.11 arm64](https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz) into `/opt/archive/bin`, creates a system `archive` user, and enables the `archive` systemd unit. Built-in `pdf-scripts/` are copied from the repo; override with `PDF_SCRIPTS_SRC` if needed.
+Re-running the script runs `git pull` in `/opt/libmyown/app` and refreshes dependencies. Your data under `/opt/libmyown/data` is preserved.
 
-Edit `/opt/archive/app/.env` (from `deploy/pi.env.example`), start the service, then complete `/setup` in the browser. See `deploy/Caddyfile.snippet` for TLS and rate limits in front of the service.
+For a private repo, set `REPO_URL=git@github.com:ganyuke/LibraryOfMyOwn.git` and ensure the Pi has a deploy key or SSH access to GitHub.
+
+The script downloads [Typst 0.15.1](https://github.com/typst/typst/releases/download/v0.15.1/typst-aarch64-unknown-linux-musl.tar.xz) and [Pandoc 3.11 arm64](https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz) into `/opt/libmyown/bin`, creates a system `libmyown` user, and enables the `libmyown` systemd unit.
+
+Edit `/opt/libmyown/app/.env` (from `deploy/pi.env.example`) if needed, start the service, then complete `/setup` in the browser. For TLS and rate limits, use [`examples/caddy/Caddyfile`](examples/caddy/Caddyfile) or adapt [`deploy/Caddyfile.snippet`](deploy/Caddyfile.snippet).
 
 ## Git remote URL
 

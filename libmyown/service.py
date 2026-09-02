@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from archive.authorship import (
+from libmyown.authorship import (
     AUTHOR_MODE_DEFAULT,
     AUTHOR_MODE_EARLIEST,
     display_author,
 )
-from archive.content import (
+from libmyown.content import (
     WorkMeta,
     format_date_reader,
     format_datetime,
@@ -17,9 +17,9 @@ from archive.content import (
     parse_work_summary,
     revision_tooltip,
 )
-from archive.git_repo import FileRevision, StoriesRepo, path_display_prefix, path_to_slug, slug_to_path
-from archive.site_config import SiteConfig
-from archive.work_index import WorkIndexEntry, WorkIndexStore
+from libmyown.git_repo import FileRevision, StoriesRepo, path_display_prefix, path_to_slug, slug_to_path
+from libmyown.site_config import SiteConfig
+from libmyown.work_index import WorkIndexEntry, WorkIndexStore
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class HistoryEntry:
     revision: FileRevision
 
 
-class ArchiveService:
+class LibraryService:
     def __init__(
         self,
         repo: StoriesRepo,

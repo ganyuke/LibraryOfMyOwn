@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
-from archive.site_config import SiteConfig
+from libmyown.site_config import SiteConfig
 
 
 def forwarded_proto(request: Request) -> str:

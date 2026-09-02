@@ -8,10 +8,10 @@ xcaddy build --with github.com/mholt/caddy-ratelimit
 sudo install -m 755 ./caddy /usr/local/bin/caddy
 ```
 
-Replace `your.domain` in the repo `Caddyfile`, then:
+Replace `your.domain` in [Caddyfile](Caddyfile), then:
 
 ```bash
-sudo caddy run --config /path/to/LibraryOfMyOwn/Caddyfile
+sudo caddy run --config examples/caddy/Caddyfile
 ```
 
 ## What the example limits

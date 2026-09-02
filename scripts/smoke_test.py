@@ -17,12 +17,12 @@ os.environ.setdefault("ORIGIN", "http://127.0.0.1:8000")
 
 from starlette.testclient import TestClient
 
-from archive.app import create_app
-from archive.config import load_settings
-from archive.git_repo import StoriesRepo, path_to_slug
-from archive.pdf import discover_pdf_options
-from archive.secrets import ensure_secrets, set_admin_password
-from archive.site_config import SiteConfig, load_site_config, save_site_config
+from libmyown.app import create_app
+from libmyown.config import load_settings
+from libmyown.git_repo import StoriesRepo, path_to_slug
+from libmyown.pdf import discover_pdf_options
+from libmyown.secrets import ensure_secrets, set_admin_password
+from libmyown.site_config import SiteConfig, load_site_config, save_site_config
 
 
 def parse_csrf(html: str) -> str:
@@ -149,7 +149,7 @@ def main() -> int:
     if r.status_code != 303:
         print("FAIL theme redirect")
         return 1
-    if client.cookies.get("archive_theme") != "dark":
+    if client.cookies.get("libmyown_theme") != "dark":
         print("FAIL theme cookie")
         return 1
     r = client.get("/")

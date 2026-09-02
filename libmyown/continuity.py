@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from archive.service import ArchiveService
-from archive.site_config import SiteConfig, StoryContinuity
+from libmyown.service import LibraryService
+from libmyown.site_config import SiteConfig, StoryContinuity
 
 
 @dataclass(frozen=True)
@@ -29,14 +29,14 @@ class ContinuityStoryOption:
     published: bool
 
 
-def story_title(service: ArchiveService, path: str) -> str:
+def story_title(service: LibraryService, path: str) -> str:
     view = service.work_at(path)
     if view is None:
         return path.rsplit("/", 1)[-1]
     return view.meta.title
 
 
-def continuity_story_options(service: ArchiveService) -> list[ContinuityStoryOption]:
+def continuity_story_options(service: LibraryService) -> list[ContinuityStoryOption]:
     options: list[ContinuityStoryOption] = []
     for path in service.all_paths():
         view = service.work_at(path)
@@ -55,7 +55,7 @@ def continuity_story_options(service: ArchiveService) -> list[ContinuityStoryOpt
 
 
 def _resolve_refs(
-    service: ArchiveService,
+    service: LibraryService,
     site: SiteConfig,
     paths: list[str],
 ) -> list[ContinuityRef]:
@@ -81,7 +81,7 @@ def _resolve_refs(
 
 def continuity_for_work(
     site: SiteConfig,
-    service: ArchiveService,
+    service: LibraryService,
     path: str,
 ) -> WorkContinuityNav:
     links = site.story_continuity.get(path, StoryContinuity())

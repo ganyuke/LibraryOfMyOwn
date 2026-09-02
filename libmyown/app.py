@@ -14,37 +14,37 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from archive.auth import (
+from libmyown.auth import (
     SETUP_PATH,
     is_admin,
     login_admin,
     logout_admin,
     require_admin,
 )
-from archive.authorship import AUTHOR_MODE_EARLIEST
-from archive.csrf import CSRFMiddleware, get_csrf_token, get_form
-from archive.config import Settings, load_settings
-from archive.middleware import ForwardedProtoMiddleware, SetupRequiredMiddleware
-from archive.request_url import normalize_public_url, request_is_secure, request_origin
-from archive.secrets import (
+from libmyown.authorship import AUTHOR_MODE_EARLIEST
+from libmyown.csrf import CSRFMiddleware, get_csrf_token, get_form
+from libmyown.config import Settings, load_settings
+from libmyown.middleware import ForwardedProtoMiddleware, SetupRequiredMiddleware
+from libmyown.request_url import normalize_public_url, request_is_secure, request_origin
+from libmyown.secrets import (
     rotate_git_password,
     rotate_session_secret,
     save_secrets,
     set_admin_password,
     verify_password,
 )
-from archive.content import discover_work_field_keys, format_rev_date, parse_field_name_list, parse_work
-from archive.continuity import (
+from libmyown.content import discover_work_field_keys, format_rev_date, parse_field_name_list, parse_work
+from libmyown.continuity import (
     continuity_for_work,
     continuity_selection,
     continuity_story_options,
 )
-from archive.diff import diff_byte_stats, diff_html as render_diff_html, format_compare_byte_summary
-from archive.git_http import AuthenticatedGitApp, mount_path_for_git
-from archive.git_repo import StoriesRepo
-from archive.pdf import discover_pdf_options, generate_pdf
-from archive.service import ArchiveService
-from archive.site_config import (
+from libmyown.diff import diff_byte_stats, diff_html as render_diff_html, format_compare_byte_summary
+from libmyown.git_http import AuthenticatedGitApp, mount_path_for_git
+from libmyown.git_repo import StoriesRepo
+from libmyown.pdf import discover_pdf_options, generate_pdf
+from libmyown.service import LibraryService
+from libmyown.site_config import (
     DEFAULT_SITE_TITLE,
     SiteConfig,
     StoryContinuity,
@@ -54,8 +54,8 @@ from archive.site_config import (
     normalize_flag_id,
     save_site_config,
 )
-from archive.theme import get_theme, set_theme_response
-from archive.work_index import WorkIndexStore
+from libmyown.theme import get_theme, set_theme_response
+from libmyown.work_index import WorkIndexStore
 
 
 logger = logging.getLogger(__name__)
@@ -119,8 +119,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
             repo._branch = branch
             repo.invalidate()
 
-    def get_service() -> ArchiveService:
-        return ArchiveService(repo, get_site(), work_index)
+    def get_service() -> LibraryService:
+        return LibraryService(repo, get_site(), work_index)
 
     def render(
         request: Request,
@@ -992,7 +992,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
         ],
         exception_handlers={Exception: unhandled_exception},
     )
-    starlette_app.state.archive = state
+    starlette_app.state.libmyown = state
     app = SetupRequiredMiddleware(
         starlette_app, is_configured=lambda: get_secrets().is_configured
     )

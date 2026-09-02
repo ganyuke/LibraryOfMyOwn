@@ -5,7 +5,7 @@ from collections.abc import Callable
 from starlette.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from archive.auth import SETUP_PATH
+from libmyown.auth import SETUP_PATH
 
 
 class ForwardedProtoMiddleware:

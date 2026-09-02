@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from archive.content import parse_work_summary
-from archive.git_repo import StoriesRepo
+from libmyown.content import parse_work_summary
+from libmyown.git_repo import StoriesRepo
 
 
 @dataclass(frozen=True)

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from archive.pdf import PdfWork
-from archive.pdf_book.impose import impose_cutstack
-from archive.pdf_book.pipeline import build_logical_pdf, pdf_work_stem
+from libmyown.pdf import PdfWork
+from libmyown.pdf_book.impose import impose_cutstack
+from libmyown.pdf_book.pipeline import build_logical_pdf, pdf_work_stem
 
 label = "Letter, cut-and-stack"
 order = 1

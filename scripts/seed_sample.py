@@ -15,7 +15,7 @@ from dulwich import porcelain
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from archive.site_config import SiteConfig, save_site_config
+from libmyown.site_config import SiteConfig, save_site_config
 
 LONG_DRAFT = "Series/The Long Draft.md"
 

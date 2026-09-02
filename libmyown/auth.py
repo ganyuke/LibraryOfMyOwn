@@ -3,8 +3,8 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from archive.csrf import rotate_csrf_token
-from archive.secrets import Secrets, verify_password
+from libmyown.csrf import rotate_csrf_token
+from libmyown.secrets import Secrets, verify_password
 
 
 SESSION_KEY = "admin"

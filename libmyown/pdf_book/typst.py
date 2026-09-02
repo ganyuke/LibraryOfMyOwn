@@ -51,7 +51,7 @@ def make_typst_document_print(body_typ: str, metadata: dict[str, str]) -> str:
     details_typ = _details_typ(category, fandom, language)
     first_page = _first_page_block(title, premise, details_typ)
 
-    return f"""// GENERATED FILE. Edit archive/pdf_book/typst.py, not this file.
+    return f"""// GENERATED FILE. Edit libmyown/pdf_book/typst.py, not this file.
 
 #set terms(hanging-indent: 1.5em)
 #set table(inset: 4pt, stroke: none)
@@ -95,7 +95,7 @@ def make_typst_document_digital(body_typ: str, metadata: dict[str, str]) -> str:
     details_typ = _details_typ(category, fandom, language)
     first_page = _first_page_block(title, premise, details_typ)
 
-    return f"""// GENERATED FILE. Edit archive/pdf_book/typst.py, not this file.
+    return f"""// GENERATED FILE. Edit libmyown/pdf_book/typst.py, not this file.
 
 #set terms(hanging-indent: 1.5em)
 #set table(inset: 4pt, stroke: none)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-THEME_COOKIE = "archive_theme"
+THEME_COOKIE = "libmyown_theme"
 THEME_LIGHT = "light"
 THEME_DARK = "dark"
 

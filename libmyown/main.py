@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import uvicorn
 
-from archive.app import create_app
-from archive.config import load_settings
+from libmyown.app import create_app
+from libmyown.config import load_settings
 
 
 def main() -> None:

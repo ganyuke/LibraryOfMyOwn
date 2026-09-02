@@ -4,10 +4,10 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from archive.pdf_book.markdown import normalized_markdown
-from archive.pdf_book.metadata import normalize_metadata
-from archive.pdf_book.tools import check_external_tools, run_pandoc, run_typst
-from archive.pdf_book.typst import (
+from libmyown.pdf_book.markdown import normalized_markdown
+from libmyown.pdf_book.metadata import normalize_metadata
+from libmyown.pdf_book.tools import check_external_tools, run_pandoc, run_typst
+from libmyown.pdf_book.typst import (
     inject_typst_title_meta,
     make_typst_document_digital,
     make_typst_document_print,

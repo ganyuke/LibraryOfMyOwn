@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from archive.content import parse_work
+from libmyown.content import parse_work
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ def discover_pdf_options(pdf_scripts_dir: Path | None) -> list[PdfOption]:
 
 def _module_name(pdf_scripts_dir: Path, script_id: str) -> str:
     safe_dir = str(pdf_scripts_dir.resolve()).replace("/", "_").replace("\\", "_")
-    return f"archive_pdf_script_{safe_dir}_{script_id}"
+    return f"libmyown_pdf_script_{safe_dir}_{script_id}"
 
 
 def _load_script_module(pdf_scripts_dir: Path, script_id: str):

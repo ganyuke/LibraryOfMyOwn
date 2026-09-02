@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from archive.secrets import (
+from libmyown.secrets import (
     ensure_secrets,
     generate_session_secret,
     hash_password,

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from archive.pdf import PdfWork
-from archive.pdf_book.impose import impose_onecut_fold
-from archive.pdf_book.pipeline import build_logical_pdf, pdf_work_stem
+from libmyown.pdf import PdfWork
+from libmyown.pdf_book.impose import impose_onecut_fold
+from libmyown.pdf_book.pipeline import build_logical_pdf, pdf_work_stem
 
 label = "Letter, one-cut fold"
 order = 2
