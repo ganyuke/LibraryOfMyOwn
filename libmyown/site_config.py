@@ -349,11 +349,35 @@ def default_site_config() -> SiteConfig:
     return SiteConfig()
 
 
-def load_site_config(path: Path) -> SiteConfig:
+_site_cache: tuple[str, float, SiteConfig] | None = None
+
+
+def clear_site_config_cache() -> None:
+    global _site_cache
+    _site_cache = None
+
+
+def site_config_mtime(path: Path) -> float:
     if not path.is_file():
-        return default_site_config()
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return SiteConfig.from_dict(data)
+        return 0.0
+    return path.stat().st_mtime
+
+
+def load_site_config(path: Path) -> SiteConfig:
+    global _site_cache
+    mtime = site_config_mtime(path)
+    cache_key = str(path.resolve())
+    if _site_cache is not None:
+        cached_path, cached_mtime, cached_site = _site_cache
+        if cached_path == cache_key and cached_mtime == mtime:
+            return cached_site
+    if not path.is_file():
+        config = default_site_config()
+    else:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        config = SiteConfig.from_dict(data)
+    _site_cache = (cache_key, mtime, config)
+    return config
 
 
 def save_site_config(path: Path, config: SiteConfig) -> None:
@@ -362,3 +386,4 @@ def save_site_config(path: Path, config: SiteConfig) -> None:
         json.dumps(config.to_dict(), indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    clear_site_config_cache()

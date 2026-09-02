@@ -34,7 +34,11 @@ from libmyown.secrets import (
     set_admin_password,
     verify_password,
 )
-from libmyown.content import format_rev_date, parse_field_name_list, parse_work
+from libmyown.content import (
+    extract_work_body,
+    format_rev_date,
+    parse_field_name_list,
+)
 from libmyown.continuity import (
     continuity_for_work,
     continuity_selection,
@@ -58,6 +62,7 @@ from libmyown.site_config import (
     load_site_config,
     normalize_flag_id,
     save_site_config,
+    site_config_mtime,
 )
 from libmyown.theme import get_theme, set_theme_response
 from libmyown.work_index import WorkIndexStore
@@ -132,7 +137,12 @@ def create_app(settings: Settings | None = None) -> Starlette:
             repo.invalidate()
 
     def get_service() -> LibraryService:
-        return LibraryService(repo, get_site(), work_index)
+        return LibraryService(
+            repo,
+            get_site(),
+            work_index,
+            site_mtime=site_config_mtime(settings.site_config_path),
+        )
 
     def render(
         request: Request,
@@ -180,8 +190,10 @@ def create_app(settings: Settings | None = None) -> Starlette:
         query = {"story": slug, **params}
         return f"?{urlencode(query)}"
 
-    def work_page_context(path: str, view) -> dict:
-        service = get_service()
+    def work_page_context(
+        path: str, view, service: LibraryService | None = None
+    ) -> dict:
+        service = service or get_service()
         site = get_site()
         continuity = continuity_for_work(site, service, path)
         linked_paths = set(site.story_continuity.get(path, StoryContinuity()).previous)
@@ -237,7 +249,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
         view = service.work_at(path)
         if view is None:
             return HTMLResponse("Not found", status_code=404)
-        return render(request, "work.html", work_page_context(path, view))
+        return render(request, "work.html", work_page_context(path, view, service))
 
     async def work_revision(request: Request) -> Response:
         slug = request.path_params["slug"]
@@ -262,7 +274,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
         view = service.work_at(path, sha)
         if view is None:
             return HTMLResponse("Not found", status_code=404)
-        return render(request, "work.html", work_page_context(path, view))
+        return render(request, "work.html", work_page_context(path, view, service))
 
     async def work_history(request: Request) -> Response:
         slug = request.path_params["slug"]
@@ -323,9 +335,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
             return HTMLResponse("Not found", status_code=404)
         old_text = service.revision_blob_text(path, old_sha) or ""
         new_text = service.revision_blob_text(path, new_sha) or ""
-        fallback = Path(path).stem
-        old_body = parse_work(old_text, fallback_title=fallback).body
-        new_body = parse_work(new_text, fallback_title=fallback).body
+        old_body = extract_work_body(old_text)
+        new_body = extract_work_body(new_text)
         byte_summary = format_compare_byte_summary(diff_byte_stats(old_body, new_body))
         diff_html = render_diff_html(old_body, new_body, view=diff_view)
         view = service.work_summary(path)

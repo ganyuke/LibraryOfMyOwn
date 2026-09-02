@@ -332,6 +332,34 @@ def parse_work(text: str, *, fallback_title: str) -> WorkMeta:
     )
 
 
+_PARSED_WORK_CACHE: dict[tuple[str, str], WorkMeta] = {}
+
+
+def clear_parsed_work_cache() -> None:
+    _PARSED_WORK_CACHE.clear()
+
+
+def parse_work_cached(
+    text: str,
+    *,
+    path: str,
+    sha: str,
+    fallback_title: str,
+) -> WorkMeta:
+    key = (path, sha)
+    cached = _PARSED_WORK_CACHE.get(key)
+    if cached is not None:
+        return cached
+    meta = parse_work(text, fallback_title=fallback_title)
+    _PARSED_WORK_CACHE[key] = meta
+    return meta
+
+
+def extract_work_body(text: str) -> str:
+    _fm_lines, body = split_frontmatter(text)
+    return body
+
+
 def format_datetime(dt) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from libmyown.content import parse_work_field_keys, resolve_crosspost_url
+from libmyown.content import (
+    clear_parsed_work_cache,
+    extract_work_body,
+    parse_work_cached,
+    parse_work_field_keys,
+    resolve_crosspost_url,
+)
 from libmyown.site_config import Crosspost, SiteConfig
 
 
@@ -60,6 +66,42 @@ class CrosspostTests(unittest.TestCase):
     def test_parse_work_field_keys(self) -> None:
         text = "---\ntitle: Test\nrating: Teen\n---\n\nBody here.\n"
         self.assertEqual(parse_work_field_keys(text), {"title", "rating"})
+
+
+class ParsedWorkCacheTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_parsed_work_cache()
+
+    def test_parse_work_cached_reuses_result(self) -> None:
+        text = "---\ntitle: Cached\n---\n\nHello **world**.\n"
+        first = parse_work_cached(
+            text, path="Series/Test.md", sha="abc1234", fallback_title="Test"
+        )
+        second = parse_work_cached(
+            text, path="Series/Test.md", sha="abc1234", fallback_title="Ignored"
+        )
+        self.assertIs(first, second)
+        self.assertIn("<strong>world</strong>", first.body_html)
+
+    def test_clear_parsed_work_cache(self) -> None:
+        text = "Plain body.\n"
+        first = parse_work_cached(
+            text, path="Series/Test.md", sha="abc1234", fallback_title="First"
+        )
+        clear_parsed_work_cache()
+        second = parse_work_cached(
+            text, path="Series/Test.md", sha="abc1234", fallback_title="Second"
+        )
+        self.assertIsNot(first, second)
+        self.assertEqual(first.title, "First")
+        self.assertEqual(second.title, "Second")
+
+
+class ExtractWorkBodyTests(unittest.TestCase):
+    def test_extract_work_body_skips_frontmatter(self) -> None:
+        text = "---\ntitle: Test\n---\n\nHello **world**.\n"
+        self.assertEqual(extract_work_body(text), "Hello **world**.\n")
+        self.assertNotIn("<strong>", extract_work_body(text))
 
 
 if __name__ == "__main__":

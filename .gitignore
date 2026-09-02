@@ -7,5 +7,6 @@ data/*
 !data/site.json.example
 data/seed-worktree/
 OPERATOR.md
+scripts/benchmark_site.py
 *.egg-info/
 .pytest_cache/

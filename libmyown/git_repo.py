@@ -36,6 +36,8 @@ class StoriesRepo:
         self._generation = 0
         self._history_cache: dict[tuple[str, bool, str | None], list[FileRevision]] = {}
         self._latest_cache: dict[tuple[str, bool, str | None], FileRevision | None] = {}
+        self._paths_cache: tuple[str, list[str]] | None = None
+        self._slug_map_cache: tuple[str, dict[str, str]] | None = None
         self._ensure_repo()
 
     @property
@@ -54,6 +56,13 @@ class StoriesRepo:
         self._generation += 1
         self._history_cache.clear()
         self._latest_cache.clear()
+        self._paths_cache = None
+        self._slug_map_cache = None
+        from libmyown.content import clear_parsed_work_cache
+        from libmyown.service import clear_merged_history_cache
+
+        clear_parsed_work_cache()
+        clear_merged_history_cache()
 
     def head_sha(self) -> str | None:
         repo = self.open()
@@ -95,6 +104,10 @@ class StoriesRepo:
         sha = commit_sha or self.head_sha()
         if not sha:
             return []
+        if commit_sha is None and self._paths_cache is not None:
+            cached_sha, cached_paths = self._paths_cache
+            if cached_sha == sha:
+                return cached_paths
         repo = self.open()
         commit = repo[sha.encode("ascii")]
         if not isinstance(commit, Commit):
@@ -103,7 +116,25 @@ class StoriesRepo:
         tree = repo[commit.tree]
         if isinstance(tree, Tree):
             self._walk_tree(repo, "", commit.tree, paths)
-        return sorted(paths)
+        paths = sorted(paths)
+        if commit_sha is None:
+            self._paths_cache = (sha, paths)
+            self._slug_map_cache = None
+        return paths
+
+    def slug_map(self, commit_sha: str | None = None) -> dict[str, str]:
+        sha = commit_sha or self.head_sha() or ""
+        if commit_sha is None and self._slug_map_cache is not None:
+            cached_sha, cached_map = self._slug_map_cache
+            if cached_sha == sha:
+                return cached_map
+        by_slug = {path_to_slug(path): path for path in self.list_markdown_paths(commit_sha)}
+        if commit_sha is None:
+            self._slug_map_cache = (sha, by_slug)
+        return by_slug
+
+    def resolve_path_slug(self, slug: str, commit_sha: str | None = None) -> str | None:
+        return self.slug_map(commit_sha).get(slug)
 
     def _walk_tree(
         self, repo: Repo, prefix: str, tree_sha: bytes, paths: list[str]

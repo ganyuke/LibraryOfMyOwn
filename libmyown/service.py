@@ -14,10 +14,11 @@ from libmyown.content import (
     format_datetime,
     format_words,
     parse_work,
+    parse_work_cached,
     parse_work_summary,
     revision_tooltip,
 )
-from libmyown.git_repo import FileRevision, StoriesRepo, path_display_prefix, path_to_slug, slug_to_path
+from libmyown.git_repo import FileRevision, StoriesRepo, path_display_prefix, path_to_slug
 from libmyown.site_config import SiteConfig
 from libmyown.work_index import WorkIndexEntry, WorkIndexStore
 
@@ -58,16 +59,32 @@ class HistoryEntry:
     revision: FileRevision
 
 
+@dataclass(frozen=True)
+class _MergedHistoryCacheEntry:
+    entries: list[HistoryEntry]
+    revision_paths: dict[str, str]
+
+
+_MERGED_HISTORY_CACHE: dict[tuple[str, int, float], _MergedHistoryCacheEntry] = {}
+
+
+def clear_merged_history_cache() -> None:
+    _MERGED_HISTORY_CACHE.clear()
+
+
 class LibraryService:
     def __init__(
         self,
         repo: StoriesRepo,
         site: SiteConfig,
         work_index: WorkIndexStore | None = None,
+        *,
+        site_mtime: float = 0.0,
     ) -> None:
         self.repo = repo
         self.site = site
         self.work_index = work_index
+        self.site_mtime = site_mtime
 
     def effective_default_author(self) -> str:
         return self.site.default_author.strip()
@@ -85,7 +102,7 @@ class LibraryService:
         history = self.merged_history(path)
         if not history:
             return self.effective_default_author()
-        earliest = min(history, key=lambda entry: entry.revision.committed_at)
+        earliest = history[-1]
         return display_author(
             earliest.revision.author_identity,
             self.site.author_aliases,
@@ -105,7 +122,7 @@ class LibraryService:
 
     def resolve_slug(self, slug: str) -> str | None:
         slug = self.canonical_slug(slug)
-        return slug_to_path(slug, self.all_paths())
+        return self.repo.resolve_path_slug(slug)
 
     def is_published(self, path: str) -> bool:
         if self.is_merge_source(path):
@@ -136,7 +153,12 @@ class LibraryService:
         return paths
 
     def merged_history(self, canonical_path: str) -> list[HistoryEntry]:
+        cache_key = (canonical_path, self.repo.generation, self.site_mtime)
+        cached = _MERGED_HISTORY_CACHE.get(cache_key)
+        if cached is not None:
+            return cached.entries
         entries: list[HistoryEntry] = []
+        revision_paths: dict[str, str] = {}
         seen_shas: set[str] = set()
         for path in self.history_paths(canonical_path):
             follow = path == canonical_path
@@ -144,20 +166,35 @@ class LibraryService:
                 if revision.sha in seen_shas:
                     continue
                 seen_shas.add(revision.sha)
+                entry_path = revision.blob_path or path
                 entries.append(
                     HistoryEntry(
-                        path=revision.blob_path or path,
+                        path=entry_path,
                         revision=revision,
                     )
                 )
+                revision_paths[revision.sha] = entry_path
         entries.sort(key=lambda entry: entry.revision.committed_at, reverse=True)
+        _MERGED_HISTORY_CACHE[cache_key] = _MergedHistoryCacheEntry(
+            entries=entries,
+            revision_paths=revision_paths,
+        )
         return entries
 
+    def _merged_history_cache_entry(
+        self, canonical_path: str
+    ) -> _MergedHistoryCacheEntry:
+        self.merged_history(canonical_path)
+        return _MERGED_HISTORY_CACHE[
+            (canonical_path, self.repo.generation, self.site_mtime)
+        ]
+
     def revision_path(self, canonical_path: str, sha: str) -> str | None:
-        for entry in self.merged_history(canonical_path):
-            if entry.revision.sha == sha:
-                return entry.path
-        return None
+        cache_key = (canonical_path, self.repo.generation, self.site_mtime)
+        cached = _MERGED_HISTORY_CACHE.get(cache_key)
+        if cached is not None:
+            return cached.revision_paths.get(sha)
+        return self._merged_history_cache_entry(canonical_path).revision_paths.get(sha)
 
     def revision_blob_text(self, canonical_path: str, sha: str) -> str | None:
         blob_path = self.revision_path(canonical_path, sha)
@@ -342,7 +379,11 @@ class LibraryService:
     def related_works(self, path: str) -> list[PublishedWork]:
         parent = Path(path).parent
         works: list[PublishedWork] = []
-        for candidate in self.all_paths():
+        if self.work_index is not None:
+            candidates = self.work_index.get().entries.keys()
+        else:
+            candidates = self.all_paths()
+        for candidate in candidates:
             if Path(candidate).parent != parent or candidate == path:
                 continue
             if not self.is_published(candidate):
@@ -367,9 +408,9 @@ class LibraryService:
         if text is None:
             return None
         if commit_sha:
-            history = self.merged_history(path)
+            cache_entry = self._merged_history_cache_entry(path)
             revision = next(
-                (entry.revision for entry in history if entry.revision.sha == sha),
+                (entry.revision for entry in cache_entry.entries if entry.revision.sha == sha),
                 None,
             )
             short_sha = revision.short_sha if revision else sha[:7]
@@ -383,7 +424,12 @@ class LibraryService:
             else:
                 revision = self.repo.latest_revision(path, follow=True)
                 updated_display, updated_tooltip, short_sha = self._revision_labels(revision)
-        meta = parse_work(text, fallback_title=Path(path).stem.replace("-", " "))
+        meta = parse_work_cached(
+            text,
+            path=blob_path,
+            sha=sha,
+            fallback_title=Path(path).stem.replace("-", " "),
+        )
         return WorkView(
             path=path,
             path_prefix=path_display_prefix(path),
