@@ -96,6 +96,13 @@ def create_app(settings: Settings | None = None) -> Starlette:
     work_index = WorkIndexStore(settings.work_index_path, repo)
     templates = Jinja2Templates(directory=str(settings.templates_dir))
 
+    def static_url(path: str) -> str:
+        target = settings.static_dir / path
+        version = int(target.stat().st_mtime) if target.is_file() else 0
+        return f"/static/{path}?v={version}"
+
+    templates.env.globals["static_url"] = static_url
+
     secrets = settings.secrets
 
     state = {

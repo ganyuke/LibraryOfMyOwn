@@ -7,7 +7,7 @@
   <title>{% block title %}{{ site_title }}{% endblock %}</title>
   {% if robots_noindex %}<meta name="robots" content="noindex">{% endif %}
   {% block head_meta %}{% endblock %}
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
   <header class="site-header">
