@@ -1063,7 +1063,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             request,
             "admin/maintenance.html",
             {
-                "pdf_cache_entries": stats.entries,
+                "pdf_cache_count": stats.pdf_count,
                 "pdf_cache_size": format_bytes(stats.bytes_on_disk),
                 "message": request.query_params.get("message", ""),
             },
@@ -1076,8 +1076,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
         form = await get_form(request)
         action = str(form.get("action", ""))
         if action == "clear_pdf_cache":
-            removed = clear_pdf_cache(settings.pdf_cache_dir)
-            message = f"Cleared {removed} PDF cache entr{'y' if removed == 1 else 'ies'}."
+            clear_pdf_cache(settings.pdf_cache_dir)
+            message = "PDF cache cleared."
         elif action == "clear_runtime_caches":
             clear_runtime_caches(repo, work_index)
             message = "Runtime caches cleared."

@@ -22,10 +22,10 @@ class CacheToolsTests(unittest.TestCase):
             work_dir.mkdir(parents=True)
             pdf = work_dir / "example.pdf"
             pdf.write_bytes(b"%PDF-1.4")
-            self.assertEqual(pdf_cache_stats(cache_dir).entries, 1)
+            self.assertEqual(pdf_cache_stats(cache_dir).pdf_count, 1)
             removed = clear_pdf_cache(cache_dir)
             self.assertEqual(removed, 1)
-            self.assertEqual(pdf_cache_stats(cache_dir).entries, 0)
+            self.assertEqual(pdf_cache_stats(cache_dir).pdf_count, 0)
 
     def test_format_bytes(self) -> None:
         self.assertEqual(format_bytes(512), "512 B")

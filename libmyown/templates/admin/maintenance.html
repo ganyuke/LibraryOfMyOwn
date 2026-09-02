@@ -14,25 +14,20 @@
 
   <fieldset class="admin-panel">
     <legend>PDF cache</legend>
-    <p>Generated PDFs are stored on disk so repeat downloads stay fast. Clear this after changing PDF scripts, fonts, or layout settings.</p>
-    <p>
-      {{ pdf_cache_entries }} cached work{{ "s" if pdf_cache_entries != 1 else "" }}
-      ({{ pdf_cache_size }} on disk)
-    </p>
+    <p>{{ pdf_cache_count }} PDF{{ "s" if pdf_cache_count != 1 else "" }} · {{ pdf_cache_size }}</p>
     <form method="post">
       {{ csrf_field(csrf_token) }}
       <input type="hidden" name="action" value="clear_pdf_cache">
-      <button type="submit" class="admin-btn">Clear PDF cache</button>
+      <button type="submit" class="admin-btn">Clear</button>
     </form>
   </fieldset>
 
   <fieldset class="admin-panel">
     <legend>Runtime caches</legend>
-    <p>In-memory caches for parsed markdown, git history, path listings, and the work index. These usually refresh on git push; clear manually if something looks stale after admin changes.</p>
     <form method="post">
       {{ csrf_field(csrf_token) }}
       <input type="hidden" name="action" value="clear_runtime_caches">
-      <button type="submit" class="admin-btn">Clear runtime caches</button>
+      <button type="submit" class="admin-btn">Clear</button>
     </form>
   </fieldset>
 </div>

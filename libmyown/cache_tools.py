@@ -11,24 +11,22 @@ from libmyown.work_index import WorkIndexStore
 
 @dataclass(frozen=True)
 class PdfCacheStats:
-    entries: int
+    pdf_count: int
     bytes_on_disk: int
 
 
 def pdf_cache_stats(cache_dir: Path) -> PdfCacheStats:
     if not cache_dir.is_dir():
-        return PdfCacheStats(entries=0, bytes_on_disk=0)
-    entries = 0
+        return PdfCacheStats(pdf_count=0, bytes_on_disk=0)
+    pdf_count = 0
     total_bytes = 0
-    for child in cache_dir.iterdir():
-        entries += 1
-        if child.is_file():
-            total_bytes += child.stat().st_size
-        elif child.is_dir():
-            for path in child.rglob("*"):
-                if path.is_file():
-                    total_bytes += path.stat().st_size
-    return PdfCacheStats(entries=entries, bytes_on_disk=total_bytes)
+    for path in cache_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        total_bytes += path.stat().st_size
+        if path.suffix.lower() == ".pdf":
+            pdf_count += 1
+    return PdfCacheStats(pdf_count=pdf_count, bytes_on_disk=total_bytes)
 
 
 def clear_pdf_cache(cache_dir: Path) -> int:
