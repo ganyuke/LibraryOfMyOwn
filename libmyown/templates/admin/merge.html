@@ -8,7 +8,7 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Merge histories", None)]) }}
 {% endblock %}
 {% block content %}
-<div class="admin-stack">
+<div class="admin-page">
 <h1>Merge histories</h1>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <form method="post" class="admin-form">
@@ -17,7 +17,7 @@
   <fieldset class="admin-panel">
     <legend>Merge</legend>
     <label>
-      Source
+      Old path
       <input name="source" list="history-source-paths" required {% if source %}value="{{ source }}"{% endif %}>
       <datalist id="history-source-paths">
         {% for path in paths %}
@@ -29,7 +29,7 @@
       </datalist>
     </label>
     <label>
-      Destination
+      Current file
       <select name="dest" required>
         <option value="" disabled {% if not dest %}selected{% endif %}>Choose…</option>
         {% for path in paths %}
@@ -55,7 +55,7 @@
         <input type="hidden" name="action" value="unmerge">
         <input type="hidden" name="source" value="{{ source }}">
         <input type="hidden" name="dest" value="{{ dest }}">
-        <button type="submit" class="admin-btn admin-btn--remove">Remove</button>
+        <button type="submit" class="admin-btn admin-btn--remove">Unmerge</button>
       </form>
     </li>
     {% endfor %}

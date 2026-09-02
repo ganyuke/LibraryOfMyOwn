@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from libmyown.content import resolve_crosspost_url
+
 
 @dataclass
 class StoryContinuity:
@@ -44,6 +46,25 @@ class FlagDef:
         return cls(label="Flag")
 
 
+@dataclass(frozen=True)
+class Crosspost:
+    label: str
+    url: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"label": self.label, "url": self.url}
+
+    @classmethod
+    def from_dict(cls, raw: Any) -> Crosspost | None:
+        if not isinstance(raw, dict):
+            return None
+        label = str(raw.get("label", "")).strip()
+        url = str(raw.get("url", "")).strip()
+        if not label or not url:
+            return None
+        return cls(label=label, url=url)
+
+
 @dataclass
 class SiteConfig:
     public_url: str = ""
@@ -74,6 +95,15 @@ class SiteConfig:
     author_aliases: dict[str, str] = field(default_factory=dict)
     work_author_mode: dict[str, str] = field(default_factory=dict)
     work_author_override: dict[str, str] = field(default_factory=dict)
+    crossposts: dict[str, list[Crosspost]] = field(default_factory=dict)
+
+    def crossposts_for(self, path: str) -> list[tuple[str, str]]:
+        links: list[tuple[str, str]] = []
+        for item in self.crossposts.get(path, ()):
+            resolved = resolve_crosspost_url(item.label, item.url)
+            if resolved:
+                links.append((item.label, resolved))
+        return links
 
     def to_dict(self) -> dict[str, Any]:
         continuity = {
@@ -136,6 +166,13 @@ class SiteConfig:
         }
         if overrides:
             payload["work_author_override"] = overrides
+        crossposts = {
+            path: [item.to_dict() for item in items]
+            for path, items in sorted(self.crossposts.items())
+            if items
+        }
+        if crossposts:
+            payload["crossposts"] = crossposts
         merge_meta = {
             dest: dict(sources)
             for dest, sources in sorted(self.history_merge_meta.items())
@@ -229,7 +266,31 @@ class SiteConfig:
                 for path, name in data.get("work_author_override", {}).items()
                 if str(name).strip()
             },
+            crossposts=cls._parse_crossposts(data),
         )
+
+    @classmethod
+    def _parse_crossposts(cls, data: dict[str, Any]) -> dict[str, list[Crosspost]]:
+        crossposts: dict[str, list[Crosspost]] = {}
+        raw = data.get("crossposts", {})
+        if isinstance(raw, dict):
+            for path, items in raw.items():
+                if not isinstance(items, list):
+                    continue
+                parsed = [
+                    item
+                    for item in (Crosspost.from_dict(entry) for entry in items)
+                    if item is not None
+                ]
+                if parsed:
+                    crossposts[str(path)] = parsed
+        legacy = data.get("ao3_links", {})
+        if isinstance(legacy, dict):
+            for path, link in legacy.items():
+                url = str(link).strip()
+                if url and str(path) not in crossposts:
+                    crossposts[str(path)] = [Crosspost(label="AO3", url=url)]
+        return crossposts
 
     @staticmethod
     def _is_graph_format(continuity: dict[str, Any]) -> bool:

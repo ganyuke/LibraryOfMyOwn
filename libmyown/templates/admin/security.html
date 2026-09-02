@@ -8,56 +8,60 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Security", None)]) }}
 {% endblock %}
 {% block content %}
-<h1>Security</h1>
-{% if message %}<p class="notice">{{ message }}</p>{% endif %}
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<div class="admin-page">
+  <h1>Security</h1>
+  {% if message %}<p class="notice">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-<fieldset class="admin-panel">
-  <legend>Git push password</legend>
-  {% if revealed_git_password %}
-  <p class="notice">Copy this password now. It will not be shown again.</p>
-  <div class="git-remote-row">
-    <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url">
-    <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
-  </div>
-  {% else %}
-  <form method="post" class="inline">
+  <fieldset class="admin-panel">
+    <legend>Git push password</legend>
+    {% if revealed_git_password %}
+    <p class="notice">Copy this password now. It will not be shown again.</p>
+    <div class="git-remote-row">
+      <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url">
+      <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
+    </div>
+    {% else %}
+    <form method="post">
+      {{ csrf_field(csrf_token) }}
+      <input type="hidden" name="action" value="regenerate_git_password">
+      <button type="submit" class="admin-btn">Regenerate</button>
+    </form>
+    {% endif %}
+  </fieldset>
+
+  <form method="post" class="admin-form">
     {{ csrf_field(csrf_token) }}
-    <input type="hidden" name="action" value="regenerate_git_password">
-    <button type="submit" class="admin-btn">Regenerate git password</button>
+    <input type="hidden" name="action" value="change_admin_password">
+    <fieldset class="admin-panel">
+      <legend>Change admin password</legend>
+      <label>
+        Current password
+        <input type="password" name="current_password" required autocomplete="current-password">
+      </label>
+      <label>
+        New password
+        <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+      </label>
+      <label>
+        Confirm new password
+        <input type="password" name="new_password_confirm" required minlength="8" autocomplete="new-password">
+      </label>
+    </fieldset>
+    <p class="admin-actions">
+      <button type="submit" class="admin-btn">Save</button>
+    </p>
   </form>
-  {% endif %}
-</fieldset>
 
-<form method="post" class="admin-form">
-  {{ csrf_field(csrf_token) }}
-  <input type="hidden" name="action" value="change_admin_password">
-  <fieldset class="admin-panel">
-    <legend>Change admin password</legend>
-    <label>
-      Current password
-      <input type="password" name="current_password" required autocomplete="current-password">
-    </label>
-    <label>
-      New password
-      <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
-    </label>
-    <label>
-      Confirm new password
-      <input type="password" name="new_password_confirm" required minlength="8" autocomplete="new-password">
-    </label>
-  </fieldset>
-  <p><button type="submit">Update admin password</button></p>
-</form>
-
-<form method="post" class="admin-form">
-  {{ csrf_field(csrf_token) }}
-  <input type="hidden" name="action" value="rotate_sessions">
-  <fieldset class="admin-panel">
-    <legend>Sessions</legend>
-    <button type="submit" class="admin-btn">Log everyone out</button>
-  </fieldset>
-</form>
+  <form method="post" class="admin-form">
+    {{ csrf_field(csrf_token) }}
+    <input type="hidden" name="action" value="rotate_sessions">
+    <fieldset class="admin-panel">
+      <legend>Sessions</legend>
+      <button type="submit" class="admin-btn">Log everyone out</button>
+    </fieldset>
+  </form>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>

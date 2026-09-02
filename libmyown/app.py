@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from urllib.parse import urlencode
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -46,6 +47,7 @@ from libmyown.pdf import discover_pdf_options, generate_pdf
 from libmyown.service import LibraryService
 from libmyown.site_config import (
     APP_LABEL,
+    Crosspost,
     DEFAULT_SITE_TITLE,
     HOME_LABEL,
     SOURCE_REPO_URL,
@@ -149,6 +151,27 @@ def create_app(settings: Settings | None = None) -> Starlette:
         }
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
+    def resolve_admin_story(
+        service: LibraryService, story_param: str
+    ) -> tuple[str, str | None]:
+        if not story_param:
+            return "", None
+        path = service.resolve_slug(story_param)
+        if path:
+            view = service.work_at(path)
+            return (view.slug if view else story_param), path
+        if story_param in set(service.all_paths()):
+            view = service.work_at(story_param)
+            return (view.slug if view else ""), story_param
+        return story_param, None
+
+    def admin_story_redirect(service: LibraryService, story_path: str, **params: str) -> str:
+        view = service.work_at(story_path)
+        if not view:
+            return ""
+        query = {"story": view.slug, **params}
+        return f"?{urlencode(query)}"
+
     def work_page_context(path: str, view) -> dict:
         service = get_service()
         site = get_site()
@@ -176,6 +199,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             "pdf_options": discover_pdf_options(settings.pdf_scripts),
             "work_blurb": view.meta.blurb(site.blurb_fields),
             "meta_rows": view.meta.display_rows(site.blurb_fields, field_order),
+            "crossposts": site.crossposts_for(path),
             "breadcrumb_items": breadcrumb_items,
         }
 
@@ -717,8 +741,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
         site = get_site()
         service = get_service()
         stories = continuity_story_options(service)
-        selected_slug = request.query_params.get("story", "")
-        selected_path = service.resolve_slug(selected_slug) if selected_slug else None
+        story_param = request.query_params.get("story", "")
+        selected_slug, selected_path = resolve_admin_story(service, story_param)
         selected_previous: set[str] = set()
         selected_next: set[str] = set()
         if selected_path:
@@ -744,7 +768,6 @@ def create_app(settings: Settings | None = None) -> Starlette:
         service = get_service()
         story_path = str(form.get("story_path", ""))
         valid_paths = set(service.all_paths())
-        redirect_slug = ""
         if story_path in valid_paths:
             previous = [
                 path
@@ -763,12 +786,90 @@ def create_app(settings: Settings | None = None) -> Starlette:
                 )
             elif story_path in site.story_continuity:
                 del site.story_continuity[story_path]
-            view = service.work_at(story_path)
-            if view:
-                redirect_slug = view.slug
         save_site_config(settings.site_config_path, site)
-        query = f"?story={redirect_slug}" if redirect_slug else ""
+        query = admin_story_redirect(service, story_path)
         return RedirectResponse(f"/admin/continuity{query}", status_code=303)
+
+    async def admin_crossposts_get(request: Request) -> Response:
+        denied = require_admin(request)
+        if denied:
+            return denied
+        site = get_site()
+        service = get_service()
+        stories = continuity_story_options(service)
+        story_param = request.query_params.get("story", "")
+        selected_slug, selected_path = resolve_admin_story(service, story_param)
+        selected_story = None
+        if stories:
+            if selected_path:
+                selected_story = next(
+                    (story for story in stories if story.path == selected_path),
+                    None,
+                )
+            if selected_story is None:
+                selected_story = stories[0]
+                selected_slug = selected_story.slug
+                selected_path = selected_story.path
+        crosspost_rows: list[Crosspost | None] = []
+        slots = 1
+        add_row_url = ""
+        fewer_row_url = ""
+        if selected_path:
+            saved = list(site.crossposts.get(selected_path, ()))
+            min_slots = max(len(saved) + 1, 1)
+            slots_param = request.query_params.get("slots", "").strip()
+            slots = max(int(slots_param), min_slots) if slots_param.isdigit() else min_slots
+            crosspost_rows = [
+                saved[index] if index < len(saved) else None
+                for index in range(slots)
+            ]
+            story_query = urlencode({"story": selected_slug})
+            add_row_url = f"/admin/crossposts?{story_query}&slots={slots + 1}"
+            fewer_row_url = (
+                f"/admin/crossposts?{story_query}&slots={slots - 1}"
+                if slots > min_slots
+                else ""
+            )
+        return render(
+            request,
+            "admin/crossposts.html",
+            {
+                "stories": stories,
+                "selected_story": selected_story,
+                "selected_slug": selected_slug,
+                "selected_path": selected_path,
+                "crosspost_rows": crosspost_rows,
+                "add_row_url": add_row_url,
+                "fewer_row_url": fewer_row_url,
+            },
+        )
+
+    async def admin_crossposts_post(request: Request) -> Response:
+        denied = require_admin(request)
+        if denied:
+            return denied
+        form = await get_form(request)
+        site = get_site()
+        service = get_service()
+        story_path = str(form.get("story_path", ""))
+        valid_paths = set(service.all_paths())
+        if story_path in valid_paths:
+            items: list[Crosspost] = []
+            for label, url in zip(
+                form.getlist("crosspost_label"),
+                form.getlist("crosspost_url"),
+            ):
+                label = str(label).strip()
+                url = str(url).strip()
+                if label and url:
+                    items.append(Crosspost(label=label, url=url))
+            if items:
+                site.crossposts[story_path] = items
+            elif story_path in site.crossposts:
+                del site.crossposts[story_path]
+        save_site_config(settings.site_config_path, site)
+        query = admin_story_redirect(service, story_path)
+        return RedirectResponse(f"/admin/crossposts{query}", status_code=303)
 
     async def admin_authorship_get(request: Request) -> Response:
         denied = require_admin(request)
@@ -977,6 +1078,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
         Route("/admin/wip", admin_wip_redirect),
         Route("/admin/continuity", admin_continuity_get, methods=["GET"]),
         Route("/admin/continuity", admin_continuity_post, methods=["POST"]),
+        Route("/admin/crossposts", admin_crossposts_get, methods=["GET"]),
+        Route("/admin/crossposts", admin_crossposts_post, methods=["POST"]),
         Route("/admin/authorship", admin_authorship_get, methods=["GET"]),
         Route("/admin/authorship", admin_authorship_post, methods=["POST"]),
         Mount(mount_path_for_git(), app=WSGIMiddleware(git_wsgi)),

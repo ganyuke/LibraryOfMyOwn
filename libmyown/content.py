@@ -10,6 +10,7 @@ import yaml
 
 BULLET_RE = re.compile(r"^\s*[-*•–—]\s*(.+?)\s*$")
 KEY_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 _-]*?)\s*:\s*(.*?)\s*$")
+AO3_HOST = "archiveofourown.org"
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,32 @@ def resolve_blurb_key(fields: dict[str, str], blurb_fields: list[str]) -> str | 
 def work_blurb(fields: dict[str, str], blurb_fields: list[str]) -> str:
     key = resolve_blurb_key(fields, blurb_fields)
     return fields[key] if key else ""
+
+
+def _ao3_work_url(raw: str) -> str | None:
+    value = raw.strip()
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    path = value.removeprefix("/")
+    if re.fullmatch(r"\d+", path):
+        return f"https://{AO3_HOST}/works/{path}"
+    if re.fullmatch(r"\d+/chapters/\d+", path):
+        return f"https://{AO3_HOST}/works/{path}"
+    return None
+
+
+def resolve_crosspost_url(label: str, raw: str) -> str | None:
+    """Resolve a crosspost target. AO3 accepts work ids; everything else needs a URL."""
+    value = raw.strip()
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    if "ao3" in label.strip().lower():
+        return _ao3_work_url(value)
+    return None
 
 
 def work_display_rows(

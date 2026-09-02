@@ -46,6 +46,18 @@ def _first_page_block(title: str, premise: str, details_typ: str) -> str:
 """
 
 
+def _page_header_block() -> str:
+    return """  header: context {
+    set text(size: 6.5pt)
+    let num = counter(page).display("1 / 1", both: true)
+    if calc.odd(here().page()) {
+      (emph(running-title), h(1fr), num).join()
+    } else {
+      (num, h(1fr), emph(running-title)).join()
+    }
+  },"""
+
+
 def make_typst_document_print(body_typ: str, metadata: dict[str, str]) -> str:
     title, premise, category, fandom, language = _metadata_fields(metadata)
     details_typ = _details_typ(category, fandom, language)
@@ -69,15 +81,7 @@ def make_typst_document_print(body_typ: str, metadata: dict[str, str]) -> str:
     top: 0.43in,
     bottom: 0.34in,
   ),
-  header: context {{
-    set text(size: 6.5pt)
-    let num = counter(page).display("1 / 1", both: true)
-    if calc.odd(here().page()) {{
-      (emph(running-title), h(1fr), num).join()
-    }} else {{
-      (num, h(1fr), emph(running-title)).join()
-    }}
-  }},
+{_page_header_block()}
 )
 
 #set text(size: 8.5pt)
@@ -112,10 +116,7 @@ def make_typst_document_digital(body_typ: str, metadata: dict[str, str]) -> str:
     top: 0.43in,
     bottom: 0.34in,
   ),
-  header: context {{
-    set text(size: 6.5pt)
-    align(center)[#counter(page).display("1 / 1", both: true)]
-  }},
+{_page_header_block()}
 )
 
 #set text(size: 8.5pt)

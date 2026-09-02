@@ -8,6 +8,7 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Publish", None)]) }}
 {% endblock %}
 {% block content %}
+<div class="admin-page">
 <h1>Publish works</h1>
 <form method="post" class="admin-form">
   {{ csrf_field(csrf_token) }}
@@ -33,4 +34,5 @@
     <button type="submit" class="admin-btn">Save</button>
   </p>
 </form>
+</div>
 {% endblock %}

@@ -8,7 +8,7 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Flags", None)]) }}
 {% endblock %}
 {% block content %}
-<div class="admin-stack">
+<div class="admin-page">
 <h1>Work flags</h1>
 {% if error == "invalid-id" %}<p class="error">Invalid flag id.</p>{% endif %}
 {% if error == "exists" %}<p class="error">Flag already exists.</p>{% endif %}
@@ -56,6 +56,39 @@
   {% endif %}
 </fieldset>
 
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="action" value="add_flag">
+  <fieldset class="admin-panel">
+    <legend>Add flag</legend>
+    <div class="flag-types flag-types--add">
+      <div class="flag-types-head">
+        <span>Id</span>
+        <span>Label</span>
+        <span>Color</span>
+        <span></span>
+      </div>
+      <div class="flag-def-row">
+        <label class="flag-def-id-input">
+          <span class="flag-field-label">Id</span>
+          <input type="text" name="new_flag_id" pattern="[A-Za-z0-9_-]+" required>
+        </label>
+        <label class="flag-def-label">
+          <span class="flag-field-label">Label</span>
+          <input type="text" name="new_flag_label" required>
+        </label>
+        <label class="flag-def-color">
+          <span class="flag-field-label">Color</span>
+          <input type="color" name="new_flag_color" value="#888888">
+        </label>
+        <div class="flag-def-remove">
+          <button type="submit" class="admin-btn">Add</button>
+        </div>
+      </div>
+    </div>
+  </fieldset>
+</form>
+
 {% if flags %}
 <form method="get" class="admin-form">
   <fieldset class="admin-panel">
@@ -88,38 +121,5 @@
 <p class="admin-actions">
   <button type="submit" class="admin-btn" form="flags-form">Save</button>
 </p>
-
-<form method="post" class="admin-form">
-  {{ csrf_field(csrf_token) }}
-  <input type="hidden" name="action" value="add_flag">
-  <fieldset class="admin-panel">
-    <legend>Add flag</legend>
-    <div class="flag-types flag-types--add">
-      <div class="flag-types-head">
-        <span>Id</span>
-        <span>Label</span>
-        <span>Color</span>
-        <span></span>
-      </div>
-      <div class="flag-def-row">
-        <label class="flag-def-id-input">
-          <span class="flag-field-label">Id</span>
-          <input type="text" name="new_flag_id" placeholder="draft" pattern="[A-Za-z0-9_-]+" required>
-        </label>
-        <label class="flag-def-label">
-          <span class="flag-field-label">Label</span>
-          <input type="text" name="new_flag_label" placeholder="Draft">
-        </label>
-        <label class="flag-def-color">
-          <span class="flag-field-label">Color</span>
-          <input type="color" name="new_flag_color" value="#888888">
-        </label>
-        <div class="flag-def-remove">
-          <button type="submit" class="admin-btn">Add</button>
-        </div>
-      </div>
-    </div>
-  </fieldset>
-</form>
 </div>
 {% endblock %}

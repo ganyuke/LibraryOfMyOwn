@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "macros.html" import crumbs, csrf_field %}
+{% block title %}Crossposts{% endblock %}
+{% block head_meta %}
+<meta name="robots" content="noindex">
+{% endblock %}
+{% block breadcrumbs %}
+{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Crossposts", None)]) }}
+{% endblock %}
+{% block content %}
+<div class="admin-page">
+<h1>Crossposts</h1>
+
+{% if stories %}
+<form method="get" class="admin-form">
+  <fieldset class="admin-panel">
+    <legend>Story</legend>
+    <label>
+      <span class="visually-hidden">Story</span>
+      <select name="story" onchange="this.form.submit()">
+        {% for story in stories %}
+        <option value="{{ story.slug }}" {% if story.slug == selected_slug %}selected{% endif %}>{{ story.title }} ({{ story.path }})</option>
+        {% endfor %}
+      </select>
+    </label>
+  </fieldset>
+</form>
+{% endif %}
+
+{% if selected_path and selected_story %}
+<form method="post" class="admin-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="story_path" value="{{ selected_path }}">
+  <fieldset class="admin-panel">
+    <legend>{{ selected_story.title }}</legend>
+    <div class="crosspost-rows">
+      <div class="crosspost-rows-head">
+        <span>Label</span>
+        <span>URL</span>
+      </div>
+      {% for row in crosspost_rows %}
+      <div class="crosspost-row">
+        <label>
+          <span class="visually-hidden">Label</span>
+          <input type="text" name="crosspost_label" value="{{ row.label if row else '' }}">
+        </label>
+        <label>
+          <span class="visually-hidden">URL</span>
+          <input type="text" name="crosspost_url" value="{{ row.url if row else '' }}">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="admin-actions">
+      <a href="{{ add_row_url }}" class="admin-btn">Add row</a>
+      {% if fewer_row_url %}<a href="{{ fewer_row_url }}" class="admin-btn admin-btn--remove">Remove row</a>{% endif %}
+    </p>
+  </fieldset>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
+</form>
+{% endif %}
+</div>
+{% endblock %}

@@ -8,6 +8,7 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Site", None)]) }}
 {% endblock %}
 {% block content %}
+<div class="admin-page">
 <h1>Site settings</h1>
 <form method="post" class="admin-form">
   {{ csrf_field(csrf_token) }}
@@ -22,7 +23,7 @@
     <legend>Site title</legend>
     <label>
       <span class="visually-hidden">Site title</span>
-      <input type="text" name="site_title" value="{{ site.site_title }}" placeholder="Library of My Own">
+      <input type="text" name="site_title" value="{{ site.site_title }}">
     </label>
   </fieldset>
   <fieldset class="admin-panel">
@@ -33,7 +34,7 @@
     </label>
     <div class="git-remote-row">
       <input type="text" readonly value="{{ git_remote_url }}" id="git-remote-url" class="git-remote-url">
-      <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-remote-url">Copy URL</button>
+      <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-remote-url">Copy</button>
     </div>
   </fieldset>
   <fieldset class="admin-panel">
@@ -51,7 +52,7 @@
     </label>
     <label class="checkbox-row">
       <input type="checkbox" name="expose_unpublished_continuity_titles" {% if site.expose_unpublished_continuity_titles %}checked{% endif %}>
-      Show unpublished continuity story titles
+      Show unpublished titles in continuity footers
     </label>
     <label class="checkbox-row">
       <input type="checkbox" name="public_history" {% if site.public_history %}checked{% endif %}>
@@ -62,8 +63,11 @@
       Ask search engines not to index the site
     </label>
   </fieldset>
-  <p><button type="submit">Save site settings</button></p>
+  <p class="admin-actions">
+    <button type="submit" class="admin-btn">Save</button>
+  </p>
 </form>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>

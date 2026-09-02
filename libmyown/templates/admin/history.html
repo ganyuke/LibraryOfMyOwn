@@ -5,9 +5,10 @@
 <meta name="robots" content="noindex">
 {% endblock %}
 {% block breadcrumbs %}
-{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Revisions", None)]) }}
+{{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Suppress revisions", None)]) }}
 {% endblock %}
 {% block content %}
+<div class="admin-page">
 <h1>Suppress revisions</h1>
 <form method="get" class="admin-form">
   <fieldset class="admin-panel">
@@ -30,7 +31,7 @@
     <legend>{{ selected_path }}</legend>
     {% for rev in history %}
     <label class="checkbox-row {% if rev.sha in suppressed %}suppressed{% endif %}"{% if rev.sha == latest_sha %} title="The current revision cannot be suppressed"{% endif %}>
-      <input type="checkbox" name="suppressed" value="{{ rev.sha }}" {% if rev.sha in suppressed %}checked{% endif %}{% if rev.sha == latest_sha %} disabled title="The current revision cannot be suppressed"{% endif %}>
+      <input type="checkbox" name="suppressed" value="{{ rev.sha }}" {% if rev.sha in suppressed %}checked{% endif %}{% if rev.sha == latest_sha %} disabled{% endif %}>
       {{ rev.short_sha }} — {{ rev.committed_at.strftime('%Y-%m-%d %H:%M') }} — {{ rev.message }}
     </label>
     {% endfor %}
@@ -40,4 +41,5 @@
   </p>
 </form>
 {% endif %}
+</div>
 {% endblock %}

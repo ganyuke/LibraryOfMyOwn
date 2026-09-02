@@ -17,6 +17,7 @@
   },
   "work_flags": {},
   "continuity": {},
+  "crossposts": {},
   "blurb_fields": ["summary"],
   "field_order": ["rating", "warnings", "fandom", "language", "category", "relationships"]
 }

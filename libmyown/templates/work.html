@@ -28,6 +28,9 @@
       · Updated {{ work.updated_display }}
       (<a href="/works/{{ work.slug }}/history" class="meta-date" title="{{ work.updated_tooltip }}">history</a>)
       {% endif %}
+      {% for label, url in crossposts %}
+      · <a href="{{ url }}" rel="noopener noreferrer">{{ label }}</a>
+      {% endfor %}
     </p>
     {% if work_blurb %}<p class="work-blurb">{{ work_blurb }}</p>{% endif %}
     {% if meta_rows %}

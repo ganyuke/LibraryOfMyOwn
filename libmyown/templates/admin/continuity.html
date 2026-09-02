@@ -8,7 +8,7 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Continuity", None)]) }}
 {% endblock %}
 {% block content %}
-<div class="continuity-admin">
+<div class="admin-page continuity-admin">
 <h1>Continuity</h1>
 
 <form method="get" class="admin-form continuity-form">
@@ -56,9 +56,8 @@
       </div>
     </fieldset>
   </div>
-  <p class="admin-continuity-note">Titles of unpublished works will be shown greyed out in the footer of this story.</p>
   <p class="admin-actions">
-    <button type="submit" class="admin-btn">Save links</button>
+    <button type="submit" class="admin-btn">Save</button>
   </p>
 </form>
 {% endif %}

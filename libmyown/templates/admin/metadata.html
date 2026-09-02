@@ -8,18 +8,19 @@
 {{ crumbs([(home_label, "/"), ("Admin", "/admin"), ("Metadata", None)]) }}
 {% endblock %}
 {% block content %}
+<div class="admin-page">
 <h1>Work metadata</h1>
 
 <form method="post" class="admin-form">
   {{ csrf_field(csrf_token) }}
   <fieldset class="admin-panel">
-    <legend>Blurb fields</legend>
+    <legend>Blurb field names</legend>
     <textarea name="blurb_fields" rows="4" class="admin-lines" aria-label="Blurb fields">{{ blurb_fields | join('\n') }}</textarea>
   </fieldset>
 
   <fieldset class="admin-panel">
-    <legend>Display order</legend>
-    <textarea name="field_order" rows="8" class="admin-lines" aria-label="Display order">{{ field_order | join('\n') }}</textarea>
+    <legend>Metadata field order</legend>
+    <textarea name="field_order" rows="8" class="admin-lines" aria-label="Metadata field order">{{ field_order | join('\n') }}</textarea>
   </fieldset>
 
   {% if discovered_fields %}
@@ -37,4 +38,5 @@
     <button type="submit" class="admin-btn">Save</button>
   </p>
 </form>
+</div>
 {% endblock %}

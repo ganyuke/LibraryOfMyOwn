@@ -8,11 +8,13 @@
 {{ crumbs([(home_label, "/"), ("Admin", None)]) }}
 {% endblock %}
 {% block content %}
+<div class="admin-page">
 <h1>Admin</h1>
 <ul class="admin-nav">
   <li><a href="/admin/site">Site settings</a></li>
   <li><a href="/admin/security">Security</a></li>
   <li><a href="/admin/publish">Publish works</a></li>
+  <li><a href="/admin/crossposts">Crossposts</a></li>
   <li><a href="/admin/flags">Work flags</a></li>
   <li><a href="/admin/metadata">Work metadata</a></li>
   <li><a href="/admin/history">Suppress revisions</a></li>
@@ -20,4 +22,5 @@
   <li><a href="/admin/continuity">Continuity</a></li>
   <li><a href="/admin/authorship">Authorship</a></li>
 </ul>
+</div>
 {% endblock %}
