@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from libmyown.content import parse_work_summary
+from libmyown.content import parse_work_field_keys, parse_work_summary
 from libmyown.git_repo import StoriesRepo
 
 
@@ -17,18 +17,28 @@ class WorkIndexEntry:
     revision_sha: str
     revision_short_sha: str
     revision_committed_at: str
+    field_keys: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "title": self.title,
             "word_count": self.word_count,
             "revision_sha": self.revision_sha,
             "revision_short_sha": self.revision_short_sha,
             "revision_committed_at": self.revision_committed_at,
         }
+        if self.field_keys:
+            payload["field_keys"] = list(self.field_keys)
+        return payload
 
     @classmethod
     def from_dict(cls, path: str, data: dict[str, object]) -> WorkIndexEntry:
+        raw_keys = data.get("field_keys", [])
+        field_keys = (
+            tuple(str(key) for key in raw_keys)
+            if isinstance(raw_keys, list)
+            else ()
+        )
         return cls(
             path=path,
             title=str(data["title"]),
@@ -36,6 +46,7 @@ class WorkIndexEntry:
             revision_sha=str(data["revision_sha"]),
             revision_short_sha=str(data["revision_short_sha"]),
             revision_committed_at=str(data["revision_committed_at"]),
+            field_keys=field_keys,
         )
 
 
@@ -78,6 +89,7 @@ def _build_entry(repo: StoriesRepo, path: str) -> WorkIndexEntry | None:
     if text is None:
         return None
     summary = parse_work_summary(text, fallback_title=Path(path).stem.replace("-", " "))
+    field_keys = tuple(sorted(parse_work_field_keys(text)))
     revision = repo.latest_revision(path, follow=True)
     if revision is None:
         return WorkIndexEntry(
@@ -87,6 +99,7 @@ def _build_entry(repo: StoriesRepo, path: str) -> WorkIndexEntry | None:
             revision_sha=head_sha,
             revision_short_sha=head_sha[:7],
             revision_committed_at=datetime.now().astimezone().isoformat(),
+            field_keys=field_keys,
         )
     return WorkIndexEntry(
         path=path,
@@ -95,6 +108,7 @@ def _build_entry(repo: StoriesRepo, path: str) -> WorkIndexEntry | None:
         revision_sha=revision.sha,
         revision_short_sha=revision.short_sha,
         revision_committed_at=revision.committed_at.isoformat(),
+        field_keys=field_keys,
     )
 
 
@@ -150,9 +164,17 @@ class WorkIndexStore:
             return self._cached
         loaded = load_work_index(self._path)
         if loaded and loaded.head_sha == head_sha and loaded.branch == branch:
+            if any(not entry.field_keys for entry in loaded.entries.values()):
+                return self.rebuild()
             self._cached = loaded
             return loaded
         return self.rebuild()
+
+    def discovered_field_keys(self) -> list[str]:
+        keys: set[str] = set()
+        for entry in self.get().entries.values():
+            keys.update(entry.field_keys)
+        return sorted(keys)
 
     def get_entry(self, path: str) -> WorkIndexEntry | None:
         index = self.get()

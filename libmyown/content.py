@@ -356,14 +356,9 @@ def parse_field_name_list(raw: str) -> list[str]:
     return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
-def discover_work_field_keys(repo) -> list[str]:
-    from pathlib import Path
-
-    keys: set[str] = set()
-    for path in repo.list_markdown_paths():
-        text = repo.get_blob_text(path)
-        if not text:
-            continue
-        meta = parse_work(text, fallback_title=Path(path).stem)
-        keys.update(meta.fields.keys())
-    return sorted(keys)
+def parse_work_field_keys(text: str) -> set[str]:
+    fm_lines, _body = split_frontmatter(text)
+    if not fm_lines:
+        return set()
+    metadata, _characters = _parse_frontmatter_lines(fm_lines)
+    return set(metadata.keys())

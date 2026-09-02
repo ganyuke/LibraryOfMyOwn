@@ -34,7 +34,7 @@ from libmyown.secrets import (
     set_admin_password,
     verify_password,
 )
-from libmyown.content import discover_work_field_keys, format_rev_date, parse_field_name_list, parse_work
+from libmyown.content import format_rev_date, parse_field_name_list, parse_work
 from libmyown.continuity import (
     continuity_for_work,
     continuity_selection,
@@ -42,7 +42,7 @@ from libmyown.continuity import (
 )
 from libmyown.diff import diff_byte_stats, diff_html as render_diff_html, format_compare_byte_summary
 from libmyown.git_http import AuthenticatedGitApp, mount_path_for_git
-from libmyown.git_repo import StoriesRepo
+from libmyown.git_repo import StoriesRepo, path_to_slug
 from libmyown.pdf import discover_pdf_options, generate_pdf
 from libmyown.service import LibraryService
 from libmyown.site_config import (
@@ -161,22 +161,23 @@ def create_app(settings: Settings | None = None) -> Starlette:
     def resolve_admin_story(
         service: LibraryService, story_param: str
     ) -> tuple[str, str | None]:
+        paths = service.all_paths()
         if not story_param:
             return "", None
         path = service.resolve_slug(story_param)
         if path:
-            view = service.work_at(path)
-            return (view.slug if view else story_param), path
-        if story_param in set(service.all_paths()):
-            view = service.work_at(story_param)
-            return (view.slug if view else ""), story_param
+            slug = path_to_slug(path)
+            return slug or story_param, path
+        if story_param in paths:
+            slug = path_to_slug(story_param)
+            return slug or "", story_param
         return story_param, None
 
     def admin_story_redirect(service: LibraryService, story_path: str, **params: str) -> str:
-        view = service.work_at(story_path)
-        if not view:
+        slug = path_to_slug(story_path)
+        if not slug:
             return ""
-        query = {"story": view.slug, **params}
+        query = {"story": slug, **params}
         return f"?{urlencode(query)}"
 
     def work_page_context(path: str, view) -> dict:
@@ -726,7 +727,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             {
                 "blurb_fields": site.blurb_fields,
                 "field_order": site.field_order,
-                "discovered_fields": discover_work_field_keys(repo),
+                "discovered_fields": work_index.discovered_field_keys(),
             },
         )
 

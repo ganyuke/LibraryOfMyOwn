@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from libmyown.content import resolve_crosspost_url
+from libmyown.content import parse_work_field_keys, resolve_crosspost_url
 from libmyown.site_config import Crosspost, SiteConfig
 
 
@@ -55,6 +55,11 @@ class CrosspostTests(unittest.TestCase):
             site.crossposts_for("Series/Old.md"),
             [("AO3", "https://archiveofourown.org/works/999")],
         )
+
+
+    def test_parse_work_field_keys(self) -> None:
+        text = "---\ntitle: Test\nrating: Teen\n---\n\nBody here.\n"
+        self.assertEqual(parse_work_field_keys(text), {"title", "rating"})
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from libmyown.git_repo import path_to_slug
 from libmyown.service import LibraryService
 from libmyown.site_config import SiteConfig, StoryContinuity
 
@@ -29,24 +31,31 @@ class ContinuityStoryOption:
     published: bool
 
 
-def story_title(service: LibraryService, path: str) -> str:
-    view = service.work_at(path)
-    if view is None:
-        return path.rsplit("/", 1)[-1]
-    return view.meta.title
+def _story_title(service: LibraryService, path: str) -> str:
+    fallback = Path(path).stem.replace("-", " ")
+    if service.work_index is None:
+        return fallback
+    entry = service.work_index.get_entry(path)
+    return entry.title if entry else fallback
 
 
 def continuity_story_options(service: LibraryService) -> list[ContinuityStoryOption]:
+    paths = service.all_paths()
+    index_entries = (
+        service.work_index.get().entries if service.work_index is not None else {}
+    )
     options: list[ContinuityStoryOption] = []
-    for path in service.all_paths():
-        view = service.work_at(path)
-        if view is None:
+    for path in paths:
+        slug = path_to_slug(path)
+        if not slug:
             continue
+        entry = index_entries.get(path)
+        title = entry.title if entry else _story_title(service, path)
         options.append(
             ContinuityStoryOption(
                 path=path,
-                slug=view.slug,
-                title=view.meta.title,
+                slug=slug,
+                title=title,
                 published=service.is_published(path),
             )
         )
@@ -61,8 +70,8 @@ def _resolve_refs(
 ) -> list[ContinuityRef]:
     refs: list[ContinuityRef] = []
     for path in paths:
-        view = service.work_at(path)
-        if view is None:
+        slug = path_to_slug(path)
+        if not slug:
             continue
         published = service.is_published(path)
         if not published and not site.expose_unpublished_continuity_titles:
@@ -70,8 +79,8 @@ def _resolve_refs(
         refs.append(
             ContinuityRef(
                 path=path,
-                slug=view.slug if published else None,
-                title=view.meta.title,
+                slug=slug if published else None,
+                title=_story_title(service, path),
                 flags=service.path_flags(path),
                 published=published,
             )
