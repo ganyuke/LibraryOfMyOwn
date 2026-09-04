@@ -208,10 +208,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             work for work in service.related_works(path) if work.path not in linked_paths
         ]
         field_order = site.field_order or None
-        head_sha = repo.head_sha()
-        viewing_revision = bool(
-            view.commit_sha and head_sha and view.commit_sha != head_sha
-        )
+        viewing_revision = view.at_revision
         breadcrumb_items: list[tuple[str, str | None]] = [
             (HOME_LABEL, "/"),
             (view.meta.title, f"/works/{view.slug}"),
@@ -397,7 +394,12 @@ def create_app(settings: Settings | None = None) -> Starlette:
         sha = repo.resolve_sha(rev) if rev else repo.head_sha()
         if not sha or not service.can_view_revision(path, sha, admin=is_admin(request)):
             return HTMLResponse("Not found", status_code=404)
-        text = service.revision_blob_text(path, sha) if rev else repo.get_blob_text(path, sha)
+        if rev:
+            text = service.revision_blob_text(path, sha)
+            if text is None:
+                text = repo.get_blob_text(path, sha)
+        else:
+            text = repo.get_blob_text(path, sha)
         if text is None:
             return HTMLResponse("Not found", status_code=404)
         committed_at = repo.commit_date(sha)

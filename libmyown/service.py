@@ -51,6 +51,7 @@ class WorkView:
     meta: WorkMeta
     flags: tuple[str, ...]
     suppressed: bool
+    at_revision: bool = False
 
 
 @dataclass(frozen=True)
@@ -395,11 +396,12 @@ class LibraryService:
         return works
 
     def work_at(self, path: str, commit_sha: str | None = None) -> WorkView | None:
+        at_revision = commit_sha is not None
         sha = self.repo.resolve_sha(commit_sha) if commit_sha else self.repo.head_sha()
         if not sha:
             return None
         blob_path = path
-        if commit_sha:
+        if at_revision:
             resolved = self.revision_path(path, sha)
             if resolved is None:
                 return None
@@ -407,7 +409,7 @@ class LibraryService:
         text = self.repo.get_blob_text(blob_path, sha)
         if text is None:
             return None
-        if commit_sha:
+        if at_revision:
             cache_entry = self._merged_history_cache_entry(path)
             revision = next(
                 (entry.revision for entry in cache_entry.entries if entry.revision.sha == sha),
@@ -415,15 +417,18 @@ class LibraryService:
             )
             short_sha = revision.short_sha if revision else sha[:7]
             updated_display, updated_tooltip, _ = self._revision_labels(revision)
+            revision_sha = sha
         else:
             index_entry = self.work_index.get_entry(path) if self.work_index else None
             if index_entry is not None:
                 updated_display, updated_tooltip, short_sha = self._revision_labels_from_entry(
                     index_entry
                 )
+                revision_sha = index_entry.revision_sha
             else:
                 revision = self.repo.latest_revision(path, follow=True)
                 updated_display, updated_tooltip, short_sha = self._revision_labels(revision)
+                revision_sha = revision.sha if revision is not None else sha
         meta = parse_work_cached(
             text,
             path=blob_path,
@@ -434,7 +439,7 @@ class LibraryService:
             path=path,
             path_prefix=path_display_prefix(path),
             slug=path_to_slug(path),
-            commit_sha=sha,
+            commit_sha=revision_sha,
             short_sha=short_sha,
             author=self.work_author(path),
             words_display=format_words(meta.word_count),
@@ -442,7 +447,8 @@ class LibraryService:
             updated_tooltip=updated_tooltip,
             meta=meta,
             flags=self.path_flags(path),
-            suppressed=self.is_suppressed(blob_path, sha),
+            suppressed=self.is_suppressed(blob_path, revision_sha),
+            at_revision=at_revision,
         )
 
     def is_suppressed(self, path: str, sha: str) -> bool:
