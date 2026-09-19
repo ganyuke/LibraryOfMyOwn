@@ -120,8 +120,13 @@
 
   function decorateTitleResume(article, slug, body) {
     const title = article.querySelector(".work-title");
-    if (!title || title.querySelector(".read-resume-wrap")) {
+    if (!title) {
       return null;
+    }
+
+    const existingWrap = title.querySelector(".read-resume-wrap");
+    if (existingWrap) {
+      existingWrap.remove();
     }
 
     const button = document.createElement("button");
@@ -178,6 +183,10 @@
   }
 
   function decorateIndexLinks() {
+    document.querySelectorAll(".read-index-mark").forEach(function (el) {
+      el.remove();
+    });
+
     document.querySelectorAll("[data-read-slug]").forEach(function (link) {
       if (link.closest(".work")) {
         return;
@@ -311,9 +320,5 @@
     initWorkPage();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  window.addEventListener("pageshow", init);
 })();
