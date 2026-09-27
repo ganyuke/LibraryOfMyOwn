@@ -1,0 +1,13 @@
+User-agent: *
+Disallow: /
+
+User-agent: *
+Content-Usage: bots=n, train-ai=n, search=n, ai-output=n
+Content-Signal: search=no, ai-train=no, ai-input=no
+Disallow: /
+
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+Content-Usage: bots=n, train-ai=n, search=n, ai-output=n
+Content-Signal: search=no, ai-train=no, ai-input=no
+Disallow: /

@@ -38,7 +38,7 @@ class SetupRequiredMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if path.startswith(SETUP_PATH) or path.startswith("/static"):
+        if path.startswith(SETUP_PATH) or path.startswith("/static") or path == "/robots.txt":
             await self.app(scope, receive, send)
             return
         response = RedirectResponse(SETUP_PATH, status_code=303)

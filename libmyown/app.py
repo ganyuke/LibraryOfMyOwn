@@ -235,6 +235,12 @@ def create_app(settings: Settings | None = None) -> Starlette:
         query = f"?{request.url.query}" if request.url.query else ""
         return RedirectResponse(f"/works/{canonical}{suffix}{query}", status_code=301)
 
+    async def robots_txt(_request: Request) -> FileResponse:
+        return FileResponse(
+            settings.static_dir / "robots.txt",
+            media_type="text/plain; charset=utf-8",
+        )
+
     async def index(request: Request) -> Response:
         service = get_service()
         works = service.published_works()
@@ -1111,6 +1117,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
         Route(SETUP_PATH, setup_get, methods=["GET"]),
         Route(SETUP_PATH, setup_post, methods=["POST"]),
         Route("/", index),
+        Route("/robots.txt", robots_txt),
         Route("/works/{slug:path}/r/{rev}", work_revision),
         Route("/works/{slug:path}/history/compare", work_history_compare),
         Route("/works/{slug:path}/history", work_history),
