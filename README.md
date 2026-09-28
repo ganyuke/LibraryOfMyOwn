@@ -96,7 +96,7 @@ git remote add library https://git:YOUR_GIT_PASSWORD@your.domain/git/stories.git
 git push -u library main
 ```
 
-Library Of My Own reads the branch tip from repo `HEAD` by default. You can configure variable `STORIES_BRANCH` or use **Admin → Site settings** to change the site to a desired branch. The site will show stories EXCLUSIVELY from this configured branch. All other branches are ignored.
+Library Of My Own reads the branch tip from repo `HEAD` by default. You can use **Admin → Site settings** to change the site to a desired branch. The site will show stories EXCLUSIVELY from this configured branch. All other branches are ignored.
 
 ### Publish stories
 

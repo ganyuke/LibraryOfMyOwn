@@ -68,7 +68,9 @@ def main() -> int:
             return 1
         print(f"OK {path}")
 
-    repo = StoriesRepo(settings.stories_repo, branch=settings.stories_branch)
+    site = load_site_config(settings.site_config_path)
+    branch = site.stories_branch.strip() or None
+    repo = StoriesRepo(settings.stories_repo, branch=branch)
     history = repo.file_history("Series/The Long Draft.md")
     if len(history) >= 2:
         old_rev = history[1].short_sha
@@ -196,7 +198,9 @@ def main() -> int:
             print("FAIL history merge redirect")
             return 1
 
-        repo = StoriesRepo(settings.stories_repo, branch=settings.stories_branch)
+        site = load_site_config(settings.site_config_path)
+    branch = site.stories_branch.strip() or None
+    repo = StoriesRepo(settings.stories_repo, branch=branch)
         expected_revisions = len(
             {
                 rev.sha

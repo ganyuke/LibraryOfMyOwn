@@ -45,7 +45,6 @@ class MergedHistoryCompareTests(unittest.TestCase):
             host="127.0.0.1",
             port=8000,
             https_enabled=None,
-            stories_branch=None,
             secrets=secrets,
         )
         client = TestClient(create_app(settings))

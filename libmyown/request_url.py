@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
-from libmyown.site_config import SiteConfig
+from libmyown.site_config import SiteConfig, normalize_public_url
 
 
 def forwarded_proto(request: Request) -> str:
@@ -28,11 +28,3 @@ def request_origin(request: Request, site: SiteConfig) -> str:
         return "http://localhost:8000"
     return f"{scheme}://{host}"
 
-
-def normalize_public_url(raw: str) -> str:
-    value = raw.strip().rstrip("/")
-    if not value:
-        return ""
-    if "://" not in value:
-        value = f"https://{value}"
-    return value

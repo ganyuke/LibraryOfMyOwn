@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from libmyown.secrets import Secrets, ensure_secrets
+from libmyown.site_config import seed_public_url, seed_stories_branch
 
 # Load .env from the project root (parent of libmyown/).
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,6 @@ class Settings:
     host: str
     port: int
     https_enabled: bool | None
-    stories_branch: str | None
     secrets: Secrets
 
     @property
@@ -80,14 +80,20 @@ def load_settings() -> Settings:
         default_scripts = _PROJECT_ROOT / "pdf-scripts"
         pdf_scripts = default_scripts if default_scripts.is_dir() else None
 
-    stories_branch_raw = os.environ.get("STORIES_BRANCH", "").strip()
-    stories_branch = stories_branch_raw or None
-
     secrets = ensure_secrets(
         data_dir / "secrets.json",
         env_admin_password=os.environ.get("ADMIN_PASSWORD", "").strip(),
         env_git_password=os.environ.get("GIT_PASSWORD", "").strip(),
         env_git_username=os.environ.get("GIT_USERNAME", "").strip(),
+    )
+    site_config_path = data_dir / "site.json"
+    seed_public_url(
+        site_config_path,
+        env_public_url=os.environ.get("PUBLIC_URL", "").strip(),
+    )
+    seed_stories_branch(
+        site_config_path,
+        env_stories_branch=os.environ.get("STORIES_BRANCH", "").strip(),
     )
 
     return Settings(
@@ -96,6 +102,5 @@ def load_settings() -> Settings:
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "8000")),
         https_enabled=_env_bool("HTTPS_ENABLED"),
-        stories_branch=stories_branch,
         secrets=secrets,
     )

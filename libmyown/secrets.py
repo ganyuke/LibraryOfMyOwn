@@ -130,9 +130,6 @@ def ensure_secrets(
         if not existing.git_password:
             existing.git_password = env_git_password or generate_git_password()
             updated = True
-        if env_git_username and existing.git_username != env_git_username:
-            existing.git_username = env_git_username
-            updated = True
         if updated:
             save_secrets(path, existing)
         return existing

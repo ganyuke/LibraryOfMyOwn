@@ -95,13 +95,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
 
     def effective_branch(current_site: SiteConfig | None = None) -> str | None:
         current_site = current_site or load_site_config(settings.site_config_path)
-        for value in (
-            settings.stories_branch,
-            current_site.stories_branch.strip() or None,
-        ):
-            if value:
-                return value
-        return None
+        branch = current_site.stories_branch.strip()
+        return branch or None
 
     repo = StoriesRepo(settings.stories_repo, branch=effective_branch(site))
     work_index = WorkIndexStore(settings.work_index_path, repo)
@@ -1099,7 +1094,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
     def on_git_receive() -> None:
         repo.invalidate()
         site = get_site()
-        if not settings.stories_branch and not site.stories_branch.strip():
+        if not site.stories_branch.strip():
             branch = repo.head_branch_name()
             if branch:
                 repo._branch = branch
