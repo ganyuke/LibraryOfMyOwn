@@ -37,11 +37,11 @@
       </span>
       <code class="flag-def-id">{{ flag_id }}</code>
       <label class="flag-def-label">
-        <span class="flag-field-label">Label</span>
+        <span class="flag-field-label visually-hidden">Label</span>
         <input type="text" name="label-{{ flag_id }}" value="{{ flag.label }}" form="flags-form" required>
       </label>
       <label class="flag-def-color">
-        <span class="flag-field-label">Color</span>
+        <span class="flag-field-label visually-hidden">Color</span>
         <input type="color" name="color-{{ flag_id }}" value="{{ flag.color or '#888888' }}" form="flags-form">
       </label>
       <form method="post" class="flag-def-remove">
@@ -70,15 +70,15 @@
       </div>
       <div class="flag-def-row">
         <label class="flag-def-id-input">
-          <span class="flag-field-label">Id</span>
+          <span class="flag-field-label visually-hidden">Id</span>
           <input type="text" name="new_flag_id" pattern="[A-Za-z0-9_-]+" required>
         </label>
         <label class="flag-def-label">
-          <span class="flag-field-label">Label</span>
+          <span class="flag-field-label visually-hidden">Label</span>
           <input type="text" name="new_flag_label" required>
         </label>
         <label class="flag-def-color">
-          <span class="flag-field-label">Color</span>
+          <span class="flag-field-label visually-hidden">Color</span>
           <input type="color" name="new_flag_color" value="#888888">
         </label>
         <div class="flag-def-remove">
