@@ -14,43 +14,18 @@
 <form method="post" class="admin-form authorship-form">
   {{ csrf_field(csrf_token) }}
   <fieldset class="admin-panel">
-    <legend>Site-wide default author</legend>
-    <label class="authorship-default-author">
-      <span class="visually-hidden">Site-wide default author</span>
+    <legend>Default author rule</legend>
+    <label>
+      Default author rule
+      <select name="default_author_rule" id="default-author-rule">
+        <option value="default" {% if default_author_rule != 'earliest' %}selected{% endif %}>Default author</option>
+        <option value="earliest" {% if default_author_rule == 'earliest' %}selected{% endif %}>Earliest commit</option>
+      </select>
+    </label>
+    <label class="authorship-default-author" id="default-author-field" {% if default_author_rule == 'earliest' %}hidden{% endif %}>
+      Site-wide default author
       <input type="text" name="default_author" value="{{ default_author }}">
     </label>
-  </fieldset>
-
-  <fieldset class="admin-panel">
-    <legend>Primary author per work</legend>
-    {% if paths %}
-    <div class="authorship-works">
-      <div class="authorship-works-head">
-        <span>Work</span>
-        <span>Author rule</span>
-        <span>Override</span>
-      </div>
-      {% for path in paths %}
-      <div class="authorship-work-row">
-        <code class="authorship-work-path">{{ path }}</code>
-        <label>
-          <span class="visually-hidden">Author source for {{ path }}</span>
-          <input type="hidden" name="work_path" value="{{ path }}">
-          <select name="work_mode">
-            <option value="default" {% if work_author_mode.get(path, 'default') != 'earliest' %}selected{% endif %}>Site default</option>
-            <option value="earliest" {% if work_author_mode.get(path) == 'earliest' %}selected{% endif %}>Earliest commit</option>
-          </select>
-        </label>
-        <label>
-          <span class="visually-hidden">Author override for {{ path }}</span>
-          <input type="text" name="work_override" value="{{ work_author_override.get(path, '') }}">
-        </label>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p>No works in the repository.</p>
-    {% endif %}
   </fieldset>
 
   <fieldset class="admin-panel">
@@ -81,5 +56,109 @@
     <button type="submit" class="admin-btn">Save</button>
   </p>
 </form>
+
+{% if available_paths %}
+<form method="post" class="admin-form authorship-form">
+  {{ csrf_field(csrf_token) }}
+  <input type="hidden" name="action" value="add_exception">
+  <fieldset class="admin-panel">
+    <legend>Add exceptions</legend>
+    <div class="authorship-add-exception">
+      <label>
+        Work
+        <select name="exception_path" required>
+          <option value="" disabled selected>Choose…</option>
+          {% for path in available_paths %}
+          <option value="{{ path }}">{{ path }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Author rule
+        <select name="exception_mode" id="exception-mode">
+          <option value="default">Default author</option>
+          <option value="earliest">Earliest commit</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label class="authorship-exception-custom" id="exception-custom-field" hidden>
+        Override
+        <input type="text" name="exception_custom">
+      </label>
+      <div class="authorship-add-action">
+        <button type="submit" class="admin-btn">Add</button>
+      </div>
+    </div>
+  </fieldset>
+</form>
+{% endif %}
+
+<fieldset class="admin-panel">
+  <legend>Works with exceptions</legend>
+  {% if exceptions %}
+  <div class="authorship-exceptions">
+    <div class="authorship-exceptions-head">
+      <span>Work</span>
+      <span>Override type</span>
+      <span>Override</span>
+      <span></span>
+    </div>
+    {% for item in exceptions %}
+    <div class="authorship-exception-row">
+      <code class="authorship-work-path">{{ item.path }}</code>
+      <span>{{ item.type_label }}</span>
+      <span>{% if item.type == 'custom' %}{{ item.override }}{% else %}<span class="authorship-muted">—</span>{% endif %}</span>
+      <form method="post" class="authorship-exception-remove">
+        {{ csrf_field(csrf_token) }}
+        <input type="hidden" name="action" value="remove_exception">
+        <input type="hidden" name="exception_path" value="{{ item.path }}">
+        <button type="submit" class="admin-btn admin-btn--remove" title="Remove exception">×</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>No works with exceptions.</p>
+  {% endif %}
+</fieldset>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const defaultRule = document.getElementById("default-author-rule");
+  const defaultField = document.getElementById("default-author-field");
+  const exceptionMode = document.getElementById("exception-mode");
+  const customField = document.getElementById("exception-custom-field");
+
+  function syncDefaultAuthorField() {
+    if (!defaultRule || !defaultField) {
+      return;
+    }
+    defaultField.hidden = defaultRule.value === "earliest";
+  }
+
+  function syncExceptionCustomField() {
+    if (!exceptionMode || !customField) {
+      return;
+    }
+    const showCustom = exceptionMode.value === "custom";
+    customField.hidden = !showCustom;
+    const input = customField.querySelector("input");
+    if (input) {
+      input.required = showCustom;
+    }
+  }
+
+  if (defaultRule) {
+    defaultRule.addEventListener("change", syncDefaultAuthorField);
+    syncDefaultAuthorField();
+  }
+
+  if (exceptionMode) {
+    exceptionMode.addEventListener("change", syncExceptionCustomField);
+    syncExceptionCustomField();
+  }
+})();
+</script>
 {% endblock %}

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from libmyown.authorship import AUTHOR_MODE_DEFAULT, AUTHOR_MODE_EARLIEST
 from libmyown.content import resolve_crosspost_url
 
 
@@ -92,6 +93,7 @@ class SiteConfig:
     blurb_fields: list[str] = field(default_factory=lambda: ["summary"])
     field_order: list[str] = field(default_factory=list)
     default_author: str = ""
+    default_author_rule: str = AUTHOR_MODE_EARLIEST
     author_aliases: dict[str, str] = field(default_factory=dict)
     work_author_mode: dict[str, str] = field(default_factory=dict)
     work_author_override: dict[str, str] = field(default_factory=dict)
@@ -145,6 +147,8 @@ class SiteConfig:
             payload["field_order"] = list(self.field_order)
         if self.default_author.strip():
             payload["default_author"] = self.default_author.strip()
+        if self.default_author_rule == AUTHOR_MODE_DEFAULT:
+            payload["default_author_rule"] = AUTHOR_MODE_DEFAULT
         aliases = {
             identity: alias.strip()
             for identity, alias in sorted(self.author_aliases.items())
@@ -155,7 +159,7 @@ class SiteConfig:
         modes = {
             path: mode
             for path, mode in sorted(self.work_author_mode.items())
-            if mode == "earliest"
+            if mode in (AUTHOR_MODE_EARLIEST, AUTHOR_MODE_DEFAULT)
         }
         if modes:
             payload["work_author_mode"] = modes
@@ -251,6 +255,11 @@ class SiteConfig:
             blurb_fields=list(data.get("blurb_fields", ["summary"])),
             field_order=list(data.get("field_order", [])),
             default_author=str(data.get("default_author", "")).strip(),
+            default_author_rule=(
+                AUTHOR_MODE_DEFAULT
+                if data.get("default_author_rule") == AUTHOR_MODE_DEFAULT
+                else AUTHOR_MODE_EARLIEST
+            ),
             author_aliases={
                 str(identity): str(alias).strip()
                 for identity, alias in data.get("author_aliases", {}).items()
@@ -259,7 +268,7 @@ class SiteConfig:
             work_author_mode={
                 str(path): str(mode)
                 for path, mode in data.get("work_author_mode", {}).items()
-                if str(mode) == "earliest"
+                if str(mode) in (AUTHOR_MODE_EARLIEST, AUTHOR_MODE_DEFAULT)
             },
             work_author_override={
                 str(path): str(name).strip()

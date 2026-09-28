@@ -97,9 +97,16 @@ class LibraryService:
         override = self.site.work_author_override.get(path, "").strip()
         if override:
             return override
-        mode = self.site.work_author_mode.get(path, AUTHOR_MODE_DEFAULT)
-        if mode != AUTHOR_MODE_EARLIEST:
+        mode = self.site.work_author_mode.get(path)
+        if mode == AUTHOR_MODE_EARLIEST:
+            return self._author_from_earliest_commit(path)
+        if mode == AUTHOR_MODE_DEFAULT:
             return self.effective_default_author()
+        if self.site.default_author_rule == AUTHOR_MODE_EARLIEST:
+            return self._author_from_earliest_commit(path)
+        return self.effective_default_author()
+
+    def _author_from_earliest_commit(self, path: str) -> str:
         history = self.merged_history(path)
         if not history:
             return self.effective_default_author()

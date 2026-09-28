@@ -22,7 +22,12 @@ from libmyown.auth import (
     logout_admin,
     require_admin,
 )
-from libmyown.authorship import AUTHOR_MODE_EARLIEST
+from libmyown.authorship import (
+    AUTHOR_MODE_DEFAULT,
+    AUTHOR_MODE_EARLIEST,
+    is_redundant_exception,
+    list_work_exceptions,
+)
 from libmyown.csrf import CSRFMiddleware, get_csrf_token, get_form
 from libmyown.cache_tools import (
     clear_pdf_cache,
@@ -899,20 +904,32 @@ def create_app(settings: Settings | None = None) -> Starlette:
         query = admin_story_redirect(service, story_path)
         return RedirectResponse(f"/admin/crossposts{query}", status_code=303)
 
+    def _prune_redundant_authorship_exceptions(site) -> None:
+        for path in list(site.work_author_mode):
+            exception_type = site.work_author_mode[path]
+            if is_redundant_exception(exception_type, site.default_author_rule):
+                del site.work_author_mode[path]
+
     async def admin_authorship_get(request: Request) -> Response:
         denied = require_admin(request)
         if denied:
             return denied
         site = get_site()
         paths = sorted(repo.list_markdown_paths(), key=str.lower)
+        exceptions = list_work_exceptions(
+            site.work_author_mode,
+            site.work_author_override,
+        )
+        exception_paths = {item["path"] for item in exceptions}
+        available_paths = [path for path in paths if path not in exception_paths]
         return render(
             request,
             "admin/authorship.html",
             {
                 "default_author": site.default_author,
-                "paths": paths,
-                "work_author_mode": site.work_author_mode,
-                "work_author_override": site.work_author_override,
+                "default_author_rule": site.default_author_rule,
+                "available_paths": available_paths,
+                "exceptions": exceptions,
                 "identities": repo.list_author_identities(),
                 "author_aliases": site.author_aliases,
             },
@@ -924,6 +941,36 @@ def create_app(settings: Settings | None = None) -> Starlette:
             return denied
         form = await get_form(request)
         site = get_site()
+        action = str(form.get("action", "save"))
+
+        if action == "add_exception":
+            path = str(form.get("exception_path", "")).strip()
+            mode = str(form.get("exception_mode", "")).strip()
+            custom = str(form.get("exception_custom", "")).strip()
+            if path in repo.list_markdown_paths():
+                site.work_author_mode.pop(path, None)
+                site.work_author_override.pop(path, None)
+                if mode == "custom" and custom:
+                    site.work_author_override[path] = custom
+                elif mode in (AUTHOR_MODE_DEFAULT, AUTHOR_MODE_EARLIEST):
+                    if not is_redundant_exception(mode, site.default_author_rule):
+                        site.work_author_mode[path] = mode
+            save_site_config(settings.site_config_path, site)
+            return RedirectResponse("/admin/authorship", status_code=303)
+
+        if action == "remove_exception":
+            path = str(form.get("exception_path", "")).strip()
+            site.work_author_mode.pop(path, None)
+            site.work_author_override.pop(path, None)
+            save_site_config(settings.site_config_path, site)
+            return RedirectResponse("/admin/authorship", status_code=303)
+
+        rule = str(form.get("default_author_rule", AUTHOR_MODE_EARLIEST)).strip()
+        site.default_author_rule = (
+            AUTHOR_MODE_EARLIEST
+            if rule == AUTHOR_MODE_EARLIEST
+            else AUTHOR_MODE_DEFAULT
+        )
         site.default_author = str(form.get("default_author", "")).strip()
         identities = form.getlist("identity")
         aliases = form.getlist("alias")
@@ -933,20 +980,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             if alias:
                 author_aliases[str(identity)] = alias
         site.author_aliases = author_aliases
-        work_paths = form.getlist("work_path")
-        work_modes = form.getlist("work_mode")
-        work_overrides = form.getlist("work_override")
-        work_author_mode: dict[str, str] = {}
-        work_author_override: dict[str, str] = {}
-        for path, mode, override in zip(work_paths, work_modes, work_overrides):
-            path = str(path)
-            if str(mode) == AUTHOR_MODE_EARLIEST:
-                work_author_mode[path] = AUTHOR_MODE_EARLIEST
-            override = str(override).strip()
-            if override:
-                work_author_override[path] = override
-        site.work_author_mode = work_author_mode
-        site.work_author_override = work_author_override
+        _prune_redundant_authorship_exceptions(site)
         save_site_config(settings.site_config_path, site)
         return RedirectResponse("/admin/authorship", status_code=303)
 

@@ -632,25 +632,27 @@ h1 {
 }
 
 .authorship-default-author {
+  display: block;
   max-width: 20rem;
+  margin-top: 0.75rem;
 }
 
 .authorship-default-author input {
   width: 100%;
 }
 
-.authorship-works,
-.authorship-identities {
+.authorship-identities,
+.authorship-exceptions {
   display: flex;
   flex-direction: column;
 }
 
-.authorship-works-head,
+.authorship-exceptions-head,
 .authorship-identities-head {
   display: none;
 }
 
-.authorship-work-row,
+.authorship-exception-row,
 .authorship-identity-row {
   display: grid;
   gap: 0.65rem 1rem;
@@ -659,7 +661,7 @@ h1 {
   align-items: center;
 }
 
-.authorship-work-row:last-child,
+.authorship-exception-row:last-child,
 .authorship-identity-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
@@ -672,18 +674,48 @@ h1 {
   word-break: break-word;
 }
 
+.authorship-muted {
+  color: var(--muted);
+}
+
 .authorship-form {
   max-width: 52rem;
 }
 
-.authorship-work-row select,
-.authorship-work-row input[type="text"],
+.authorship-add-exception {
+  display: grid;
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.authorship-add-exception label {
+  display: block;
+}
+
+.authorship-add-exception select,
+.authorship-add-exception input[type="text"],
 .authorship-identity-row input[type="text"] {
   width: 100%;
 }
 
+.authorship-add-action .admin-btn {
+  width: 100%;
+}
+
+.authorship-exception-remove {
+  display: inline;
+  margin: 0;
+}
+
+.authorship-exception-remove .admin-btn {
+  width: auto;
+  min-width: 2rem;
+  padding-inline: 0.45rem;
+  line-height: 1.2;
+}
+
 @media (min-width: 40rem) {
-  .authorship-works-head,
+  .authorship-exceptions-head,
   .authorship-identities-head {
     display: grid;
     gap: 0 1rem;
@@ -694,14 +726,18 @@ h1 {
     border-bottom: 1px solid var(--border);
   }
 
-  .authorship-works-head,
-  .authorship-work-row {
-    grid-template-columns: minmax(12rem, 1fr) 10rem minmax(10rem, 14rem);
+  .authorship-exceptions-head,
+  .authorship-exception-row {
+    grid-template-columns: minmax(12rem, 1fr) 10rem minmax(10rem, 14rem) 2.5rem;
   }
 
   .authorship-identities-head,
   .authorship-identity-row {
     grid-template-columns: minmax(14rem, 1fr) minmax(10rem, 16rem);
+  }
+
+  .authorship-add-exception {
+    grid-template-columns: minmax(12rem, 1fr) 10rem minmax(10rem, 14rem) 5rem;
   }
 
   .crosspost-rows-head,
