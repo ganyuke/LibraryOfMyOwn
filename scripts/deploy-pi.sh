@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Install LibraryOfMyOwn under /opt/libmyown on a Raspberry Pi (aarch64).
+# Install LibraryOfMyOwn under /opt/libmyown on Linux (auto-detects CPU arch).
 # Bundles typst and pandoc; pdf-scripts ship with the repo.
 #
-# Usage (from an existing clone on the Pi):
+# Usage (from an existing clone):
 #   sudo ./scripts/deploy-pi.sh
 #
-# Bootstrap on a fresh Pi (no clone yet):
+# Bootstrap on a fresh system (no clone yet):
 #   curl -fsSL https://raw.githubusercontent.com/ganyuke/LibraryOfMyOwn/main/scripts/deploy-pi.sh | sudo bash
 #
 # Optional:
@@ -13,6 +13,10 @@
 #   GIT_REF=main                                        branch to deploy (default: main)
 #   INSTALL_ROOT=/opt/libmyown                          install location (default)
 #   LIBMYOWN_USER=libmyown                              system user (created if missing)
+#   TYPST_VERSION=0.15.1                                typst release (default)
+#   PANDOC_VERSION=3.11                                 pandoc release (default)
+#   TYPST_URL=...                                       override typst download URL
+#   PANDOC_URL=...                                      override pandoc download URL
 
 set -euo pipefail
 
@@ -20,9 +24,8 @@ INSTALL_ROOT="${INSTALL_ROOT:-/opt/libmyown}"
 LIBMYOWN_USER="${LIBMYOWN_USER:-libmyown}"
 GIT_REF="${GIT_REF:-main}"
 DEFAULT_REPO_URL="https://github.com/ganyuke/LibraryOfMyOwn.git"
-
-TYPST_URL="${TYPST_URL:-https://github.com/typst/typst/releases/download/v0.15.1/typst-aarch64-unknown-linux-musl.tar.xz}"
-PANDOC_URL="${PANDOC_URL:-https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz}"
+TYPST_VERSION="${TYPST_VERSION:-0.15.1}"
+PANDOC_VERSION="${PANDOC_VERSION:-3.11}"
 
 APP_DIR="$INSTALL_ROOT/app"
 VENV_DIR="$INSTALL_ROOT/venv"
@@ -40,6 +43,35 @@ need_cmd() {
     echo "Missing required command: $1" >&2
     exit 1
   fi
+}
+
+default_typst_url() {
+  local asset
+  case "$(uname -m)" in
+    x86_64) asset="typst-x86_64-unknown-linux-musl.tar.xz" ;;
+    aarch64 | arm64) asset="typst-aarch64-unknown-linux-musl.tar.xz" ;;
+    armv7l | armv6l) asset="typst-armv7-unknown-linux-musleabi.tar.xz" ;;
+    riscv64) asset="typst-riscv64gc-unknown-linux-gnu.tar.xz" ;;
+    *)
+      echo "Unsupported architecture for typst: $(uname -m) (set TYPST_URL manually)" >&2
+      return 1
+      ;;
+  esac
+  printf 'https://github.com/typst/typst/releases/download/v%s/%s\n' "$TYPST_VERSION" "$asset"
+}
+
+default_pandoc_url() {
+  local arch
+  case "$(uname -m)" in
+    x86_64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *)
+      echo "Unsupported architecture for pandoc $PANDOC_VERSION: $(uname -m) (prebuilt tarballs exist for amd64 and arm64 only; set PANDOC_URL manually)" >&2
+      return 1
+      ;;
+  esac
+  printf 'https://github.com/jgm/pandoc/releases/download/%s/pandoc-%s-linux-%s.tar.gz\n' \
+    "$PANDOC_VERSION" "$PANDOC_VERSION" "$arch"
 }
 
 default_repo_url() {
@@ -81,14 +113,18 @@ if [[ "$PY_MAJOR" -lt 3 ]] || [[ "$PY_MAJOR" -eq 3 && "$PY_MINOR" -lt 12 ]]; the
   echo "Warning: Python $PY_VER found; this project targets 3.14+. Install a newer python3 if the app fails." >&2
 fi
 
-echo "==> Creating layout under $INSTALL_ROOT"
+MACHINE="$(uname -m)"
+TYPST_URL="${TYPST_URL:-$(default_typst_url)}"
+PANDOC_URL="${PANDOC_URL:-$(default_pandoc_url)}"
+
+echo "==> Creating layout under $INSTALL_ROOT (arch: $MACHINE)"
 install -d -m 755 "$INSTALL_ROOT" "$BIN_DIR" "$DATA_DIR" "$PDF_SCRIPTS_DIR"
 
 if ! id "$LIBMYOWN_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$INSTALL_ROOT" --shell /usr/sbin/nologin "$LIBMYOWN_USER"
 fi
 
-echo "==> Installing typst"
+echo "==> Installing typst ($TYPST_URL)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 curl -fsSL "$TYPST_URL" | tar -xJ -C "$tmpdir"
@@ -99,7 +135,7 @@ if [[ -z "$typst_bin" ]]; then
 fi
 install -m 755 "$typst_bin" "$BIN_DIR/typst"
 
-echo "==> Installing pandoc"
+echo "==> Installing pandoc ($PANDOC_URL)"
 rm -rf "$tmpdir"/*
 curl -fsSL "$PANDOC_URL" | tar -xz -C "$tmpdir"
 pandoc_bin="$(find "$tmpdir" -path '*/bin/pandoc' -type f | head -n 1)"
@@ -158,14 +194,20 @@ if [[ ! -f "$DATA_DIR/site.json" ]]; then
 fi
 
 if [[ ! -f "$APP_DIR/.env" ]]; then
-  echo "==> Creating $APP_DIR/.env from deploy/pi.env.example"
-  cp "$APP_DIR/deploy/pi.env.example" "$APP_DIR/.env"
+  echo "==> Creating $APP_DIR/.env from examples/env.example"
+  cp "$APP_DIR/examples/env.example" "$APP_DIR/.env"
+  sed -i "s|^DATA_DIR=.*|DATA_DIR=$DATA_DIR|" "$APP_DIR/.env"
+  if grep -q '^# PDF_SCRIPTS=' "$APP_DIR/.env"; then
+    sed -i "s|^# PDF_SCRIPTS=.*|PDF_SCRIPTS=$PDF_SCRIPTS_DIR|" "$APP_DIR/.env"
+  else
+    echo "PDF_SCRIPTS=$PDF_SCRIPTS_DIR" >>"$APP_DIR/.env"
+  fi
   echo "Review $APP_DIR/.env (paths only; secrets and public URL are set at /setup)." >&2
 fi
 
 echo "==> Installing systemd unit"
 sed "s|/opt/libmyown|$INSTALL_ROOT|g; s|^User=libmyown|User=$LIBMYOWN_USER|; s|^Group=libmyown|Group=$LIBMYOWN_USER|" \
-  "$APP_DIR/deploy/libmyown.service" >/etc/systemd/system/libmyown.service
+  "$APP_DIR/examples/libmyown.service" >/etc/systemd/system/libmyown.service
 systemctl daemon-reload
 systemctl enable libmyown.service
 
