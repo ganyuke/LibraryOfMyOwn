@@ -72,6 +72,14 @@ def robots_txt(request: Request) -> FileResponse:
     )
 
 
+def favicon_ico(request: Request) -> FileResponse:
+    return FileResponse(
+        get_state(request).settings.static_dir / "favicon.ico",
+        media_type="image/x-icon",
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
+
+
 def index(request: Request) -> Response:
     service = get_state(request).service()
     return render(request, "index.html", {"works": service.published_works()})
@@ -249,6 +257,7 @@ def work_pdf(request: Request) -> Response:
 routes = [
     Route("/", index),
     Route("/robots.txt", robots_txt),
+    Route("/favicon.ico", favicon_ico),
     Route("/works/{slug:path}/r/{rev}", work_revision),
     Route("/works/{slug:path}/history/compare", work_history_compare),
     Route("/works/{slug:path}/history", work_history),
