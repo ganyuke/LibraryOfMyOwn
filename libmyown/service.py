@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,17 +11,28 @@ from libmyown.authorship import (
 )
 from libmyown.content import (
     WorkMeta,
+    extract_work_body,
     format_date_reader,
     format_datetime,
     format_words,
-    parse_work,
     parse_work_cached,
-    parse_work_summary,
     revision_tooltip,
 )
-from libmyown.git_repo import FileRevision, StoriesRepo, path_display_prefix, path_to_slug
+from libmyown.diff import diff_byte_stats, diff_html, format_compare_byte_summary
+from libmyown.git_repo import FileRevision, path_display_prefix, path_to_slug
+from libmyown.lru import LRUCache
 from libmyown.site_config import SiteConfig
-from libmyown.work_index import WorkIndexEntry, WorkIndexStore
+from libmyown.snapshot import Snapshot, WorkIndexEntry
+
+REVISION_RE = re.compile(r"[0-9a-f]{4,40}")
+MAX_DIFF_CHARS = 2 * 1024 * 1024
+
+# (old path, old sha, new path, new sha, view) -> (byte summary html, diff html)
+_DIFF_CACHE: LRUCache[tuple[str, str]] = LRUCache(64)
+
+
+class DiffTooLarge(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -60,32 +72,18 @@ class HistoryEntry:
     revision: FileRevision
 
 
-@dataclass(frozen=True)
-class _MergedHistoryCacheEntry:
-    entries: list[HistoryEntry]
-    revision_paths: dict[str, str]
-
-
-_MERGED_HISTORY_CACHE: dict[tuple[str, int, float], _MergedHistoryCacheEntry] = {}
-
-
-def clear_merged_history_cache() -> None:
-    _MERGED_HISTORY_CACHE.clear()
+def clear_diff_cache() -> None:
+    _DIFF_CACHE.clear()
 
 
 class LibraryService:
-    def __init__(
-        self,
-        repo: StoriesRepo,
-        site: SiteConfig,
-        work_index: WorkIndexStore | None = None,
-        *,
-        site_mtime: float = 0.0,
-    ) -> None:
-        self.repo = repo
+    """Per-request view over one immutable Snapshot and one SiteConfig."""
+
+    def __init__(self, snapshot: Snapshot, site: SiteConfig) -> None:
+        self.snapshot = snapshot
         self.site = site
-        self.work_index = work_index
-        self.site_mtime = site_mtime
+
+    # -- authorship ------------------------------------------------------------
 
     def effective_default_author(self) -> str:
         return self.site.default_author.strip()
@@ -97,27 +95,28 @@ class LibraryService:
         override = self.site.work_author_override.get(path, "").strip()
         if override:
             return override
-        mode = self.site.work_author_mode.get(path)
+        mode = self.site.work_author_mode.get(path) or self.site.default_author_rule
         if mode == AUTHOR_MODE_EARLIEST:
-            return self._author_from_earliest_commit(path)
-        if mode == AUTHOR_MODE_DEFAULT:
-            return self.effective_default_author()
-        if self.site.default_author_rule == AUTHOR_MODE_EARLIEST:
             return self._author_from_earliest_commit(path)
         return self.effective_default_author()
 
     def _author_from_earliest_commit(self, path: str) -> str:
-        history = self.merged_history(path)
-        if not history:
+        identity = ""
+        entry = self.snapshot.entry(path)
+        if entry is not None and entry.earliest_author_identity and not self.site.history_merges.get(path):
+            identity = entry.earliest_author_identity
+        else:
+            history = self.merged_history(path)
+            if history:
+                identity = history[-1].revision.author_identity
+        if not identity:
             return self.effective_default_author()
-        earliest = history[-1]
-        return display_author(
-            earliest.revision.author_identity,
-            self.site.author_aliases,
-        )
+        return display_author(identity, self.site.author_aliases)
+
+    # -- paths and publishing ------------------------------------------------------
 
     def all_paths(self) -> list[str]:
-        return self.repo.list_markdown_paths()
+        return self.snapshot.paths
 
     def canonical_slug(self, slug: str) -> str:
         seen: set[str] = set()
@@ -129,8 +128,7 @@ class LibraryService:
         return slug
 
     def resolve_slug(self, slug: str) -> str | None:
-        slug = self.canonical_slug(slug)
-        return self.repo.resolve_path_slug(slug)
+        return self.snapshot.resolve_slug(self.canonical_slug(slug))
 
     def is_published(self, path: str) -> bool:
         if self.is_merge_source(path):
@@ -144,10 +142,7 @@ class LibraryService:
         return False
 
     def is_merge_source(self, path: str) -> bool:
-        for sources in self.site.history_merges.values():
-            if path in sources:
-                return True
-        return False
+        return any(path in sources for sources in self.site.history_merges.values())
 
     def merge_dest_for(self, path: str) -> str | None:
         for dest, sources in self.site.history_merges.items():
@@ -156,150 +151,182 @@ class LibraryService:
         return None
 
     def history_paths(self, canonical_path: str) -> list[str]:
-        paths = [canonical_path]
-        paths.extend(self.site.history_merges.get(canonical_path, []))
-        return paths
+        return [canonical_path, *self.site.history_merges.get(canonical_path, [])]
+
+    def path_flags(self, path: str) -> tuple[str, ...]:
+        known = self.site.flags
+        return tuple(flag_id for flag_id in self.site.work_flags.get(path, []) if flag_id in known)
+
+    # -- history -----------------------------------------------------------------
 
     def merged_history(self, canonical_path: str) -> list[HistoryEntry]:
-        cache_key = (canonical_path, self.repo.generation, self.site_mtime)
-        cached = _MERGED_HISTORY_CACHE.get(cache_key)
-        if cached is not None:
-            return cached.entries
+        paths = tuple(self.history_paths(canonical_path))
+        return self.snapshot._memoized(("merged", paths), lambda: self._merged_history(paths))
+
+    def _merged_history(self, paths: tuple[str, ...]) -> list[HistoryEntry]:
         entries: list[HistoryEntry] = []
-        revision_paths: dict[str, str] = {}
         seen_shas: set[str] = set()
-        for path in self.history_paths(canonical_path):
-            follow = path == canonical_path
-            for revision in self.repo.file_history(path, follow=follow):
+        canonical_path = paths[0]
+        for path in paths:
+            for revision in self.snapshot.file_history(path, follow=path == canonical_path):
                 if revision.sha in seen_shas:
                     continue
                 seen_shas.add(revision.sha)
-                entry_path = revision.blob_path or path
-                entries.append(
-                    HistoryEntry(
-                        path=entry_path,
-                        revision=revision,
-                    )
-                )
-                revision_paths[revision.sha] = entry_path
+                entries.append(HistoryEntry(path=revision.blob_path or path, revision=revision))
         entries.sort(key=lambda entry: entry.revision.committed_at, reverse=True)
-        _MERGED_HISTORY_CACHE[cache_key] = _MergedHistoryCacheEntry(
-            entries=entries,
-            revision_paths=revision_paths,
-        )
         return entries
 
-    def _merged_history_cache_entry(
-        self, canonical_path: str
-    ) -> _MergedHistoryCacheEntry:
-        self.merged_history(canonical_path)
-        return _MERGED_HISTORY_CACHE[
-            (canonical_path, self.repo.generation, self.site_mtime)
+    def is_suppressed(self, path: str, sha: str) -> bool:
+        return sha in self.site.suppressed_commits.get(path, set())
+
+    def visible_history(self, path: str) -> list[HistoryEntry]:
+        return [
+            entry
+            for entry in self.merged_history(path)
+            if not self.is_suppressed(entry.path, entry.revision.sha)
         ]
 
+    def sanitize_suppressed(self, path: str, suppressed: set[str]) -> set[str]:
+        history = self.snapshot.file_history(path, follow=True)
+        if not history:
+            return set()
+        latest_sha = history[0].sha
+        valid_shas = {revision.sha for revision in history}
+        return {sha for sha in suppressed if sha in valid_shas and sha != latest_sha}
+
     def revision_path(self, canonical_path: str, sha: str) -> str | None:
-        cache_key = (canonical_path, self.repo.generation, self.site_mtime)
-        cached = _MERGED_HISTORY_CACHE.get(cache_key)
-        if cached is not None:
-            return cached.revision_paths.get(sha)
-        return self._merged_history_cache_entry(canonical_path).revision_paths.get(sha)
+        for entry in self.merged_history(canonical_path):
+            if entry.revision.sha == sha:
+                return entry.path
+        return None
 
-    def revision_blob_text(self, canonical_path: str, sha: str) -> str | None:
-        blob_path = self.revision_path(canonical_path, sha)
-        if blob_path is None:
+    def resolve_revision(self, path: str, rev: str, *, admin: bool) -> HistoryEntry | None:
+        """The only way a request turns a revision string into content.
+
+        Accepts hex commit ids (4-40 chars) that name exactly one commit in this
+        work's merged history on the configured branch. Ref names, other
+        branches and unrelated commits never resolve. Anonymous readers also
+        need the work published and the revision not suppressed.
+        """
+        rev = rev.strip().lower()
+        if not REVISION_RE.fullmatch(rev):
             return None
-        return self.repo.get_blob_text(blob_path, sha)
+        if not admin and not self.is_published(path):
+            return None
+        matches = [
+            entry for entry in self.merged_history(path) if entry.revision.sha.startswith(rev)
+        ]
+        if len(matches) != 1:
+            return None
+        entry = matches[0]
+        if not admin and self.is_suppressed(entry.path, entry.revision.sha):
+            return None
+        return entry
 
-    def path_flags(self, path: str) -> tuple[str, ...]:
-        known = set(self.site.flags)
-        return tuple(
-            flag_id
-            for flag_id in self.site.work_flags.get(path, [])
-            if flag_id in known
-        )
+    def revision_text(self, entry: HistoryEntry) -> str | None:
+        return self.snapshot.blob_text(entry.path, entry.revision.sha)
 
-    def _revision_labels(
-        self, revision: FileRevision | None
-    ) -> tuple[str, str, str]:
-        if revision is None:
-            return "", "", ""
-        committed_exact = format_datetime(revision.committed_at)
-        return (
-            format_date_reader(revision.committed_at),
-            revision_tooltip(revision.short_sha, committed_exact),
-            revision.short_sha,
-        )
+    def compare(self, old: HistoryEntry, new: HistoryEntry, view: str) -> tuple[str, str]:
+        key = (old.path, old.revision.sha, new.path, new.revision.sha, view)
 
-    def _revision_labels_from_entry(
-        self, entry: WorkIndexEntry
-    ) -> tuple[str, str, str]:
-        from datetime import datetime
+        def compute() -> tuple[str, str]:
+            old_body = extract_work_body(self.revision_text(old) or "")
+            new_body = extract_work_body(self.revision_text(new) or "")
+            if len(old_body) + len(new_body) > MAX_DIFF_CHARS:
+                raise DiffTooLarge()
+            summary = format_compare_byte_summary(diff_byte_stats(old_body, new_body))
+            return summary, diff_html(old_body, new_body, view=view)
 
-        committed_at = datetime.fromisoformat(entry.revision_committed_at)
-        committed_exact = format_datetime(committed_at)
-        return (
-            format_date_reader(committed_at),
-            revision_tooltip(entry.revision_short_sha, committed_exact),
-            entry.revision_short_sha,
-        )
+        return _DIFF_CACHE.get_or_compute(key, compute)
 
-    def _published_work_from_entry(
-        self, entry: WorkIndexEntry, path: str | None = None
-    ) -> PublishedWork:
-        from datetime import datetime
+    # -- work summaries and views --------------------------------------------------
 
-        committed_at = datetime.fromisoformat(entry.revision_committed_at)
-        committed_exact = format_datetime(committed_at)
-        work_path = path or entry.path
+    def _published_work_from_entry(self, entry: WorkIndexEntry) -> PublishedWork:
+        committed_at = entry.committed_at
         return PublishedWork(
-            path=work_path,
-            path_prefix=path_display_prefix(work_path),
-            slug=path_to_slug(work_path),
+            path=entry.path,
+            path_prefix=path_display_prefix(entry.path),
+            slug=path_to_slug(entry.path),
             title=entry.title,
-            author=self.work_author(work_path),
+            author=self.work_author(entry.path),
             word_count=entry.word_count,
             words_display=format_words(entry.word_count),
             updated_display=format_date_reader(committed_at),
-            updated_tooltip=revision_tooltip(entry.revision_short_sha, committed_exact),
-            flags=self.path_flags(work_path),
+            updated_tooltip=revision_tooltip(entry.revision_short_sha, format_datetime(committed_at)),
+            flags=self.path_flags(entry.path),
         )
 
     def work_summary(self, path: str) -> PublishedWork | None:
-        if self.work_index is not None:
-            entry = self.work_index.get_entry(path)
-            if entry is not None:
-                return self._published_work_from_entry(entry, path)
-        return self._work_summary_uncached(path)
+        entry = self.snapshot.entry(path)
+        return self._published_work_from_entry(entry) if entry is not None else None
 
-    def _work_summary_uncached(self, path: str) -> PublishedWork | None:
-        sha = self.repo.head_sha()
-        if not sha:
-            return None
-        text = self.repo.get_blob_text(path, sha)
+    def published_works(self) -> list[PublishedWork]:
+        works = [
+            self._published_work_from_entry(entry)
+            for path, entry in self.snapshot.entries.items()
+            if self.is_published(path)
+        ]
+        works.sort(key=lambda work: work.path.lower())
+        return works
+
+    def related_works(self, path: str) -> list[PublishedWork]:
+        parent = Path(path).parent
+        works = [
+            self._published_work_from_entry(entry)
+            for candidate, entry in self.snapshot.entries.items()
+            if candidate != path and Path(candidate).parent == parent and self.is_published(candidate)
+        ]
+        works.sort(key=lambda work: work.path.lower())
+        return works
+
+    def work_at(self, path: str, revision: HistoryEntry | None = None) -> WorkView | None:
+        """The latest version of a work, or one already-authorized revision of it."""
+        fallback_title = Path(path).stem.replace("-", " ")
+        if revision is not None:
+            sha = revision.revision.sha
+            blob_path = revision.path
+            text = self.revision_text(revision)
+            short_sha = revision.revision.short_sha
+            committed_at = revision.revision.committed_at
+            updated_display = format_date_reader(committed_at)
+            updated_tooltip = revision_tooltip(short_sha, format_datetime(committed_at))
+        else:
+            entry = self.snapshot.entry(path)
+            if entry is None or not self.snapshot.head_sha:
+                return None
+            sha = entry.revision_sha
+            blob_path = path
+            text = self.snapshot.blob_text(path, self.snapshot.head_sha)
+            short_sha = entry.revision_short_sha
+            committed_at = entry.committed_at
+            updated_display = format_date_reader(committed_at)
+            updated_tooltip = revision_tooltip(short_sha, format_datetime(committed_at))
         if text is None:
             return None
-        summary = parse_work_summary(text, fallback_title=Path(path).stem.replace("-", " "))
-        updated_display, updated_tooltip, _ = self._revision_labels(
-            self.repo.latest_revision(path, follow=True)
-        )
-        return PublishedWork(
+        meta = parse_work_cached(text, path=blob_path, sha=sha, fallback_title=fallback_title)
+        return WorkView(
             path=path,
             path_prefix=path_display_prefix(path),
             slug=path_to_slug(path),
-            title=summary.title,
+            commit_sha=sha,
+            short_sha=short_sha,
             author=self.work_author(path),
-            word_count=summary.word_count,
-            words_display=format_words(summary.word_count),
+            words_display=format_words(meta.word_count),
             updated_display=updated_display,
             updated_tooltip=updated_tooltip,
+            meta=meta,
             flags=self.path_flags(path),
+            suppressed=self.is_suppressed(blob_path, sha),
+            at_revision=revision is not None,
         )
+
+    # -- history merges (mutate self.site; call inside ConfigStore.edit) ------------
 
     def apply_history_merge(self, *, source: str, dest: str) -> str | None:
         paths = set(self.all_paths())
         if dest not in paths:
             return "Destination file not found."
-        if source not in paths and not self.repo.path_has_history(source):
+        if source not in paths and not self.snapshot.file_history(source, follow=True):
             return "Source file not found."
         if source == dest:
             return "Source and destination must be different."
@@ -336,7 +363,6 @@ class LibraryService:
                 dest_meta[path] = transferred_meta[path]
 
         self.site.slug_redirects[source_slug] = dest_slug
-
         self.site.published_paths.discard(source)
         self.site.work_flags.pop(source, None)
         return None
@@ -372,118 +398,3 @@ class LibraryService:
         if dest in self.site.history_merge_meta and not self.site.history_merge_meta[dest]:
             del self.site.history_merge_meta[dest]
         return None
-
-    def published_works(self) -> list[PublishedWork]:
-        works: list[PublishedWork] = []
-        for path in self.all_paths():
-            if not self.is_published(path):
-                continue
-            summary = self.work_summary(path)
-            if summary is not None:
-                works.append(summary)
-        works.sort(key=lambda w: w.path.lower())
-        return works
-
-    def related_works(self, path: str) -> list[PublishedWork]:
-        parent = Path(path).parent
-        works: list[PublishedWork] = []
-        if self.work_index is not None:
-            candidates = self.work_index.get().entries.keys()
-        else:
-            candidates = self.all_paths()
-        for candidate in candidates:
-            if Path(candidate).parent != parent or candidate == path:
-                continue
-            if not self.is_published(candidate):
-                continue
-            summary = self.work_summary(candidate)
-            if summary is not None:
-                works.append(summary)
-        works.sort(key=lambda w: w.path.lower())
-        return works
-
-    def work_at(self, path: str, commit_sha: str | None = None) -> WorkView | None:
-        at_revision = commit_sha is not None
-        sha = self.repo.resolve_sha(commit_sha) if commit_sha else self.repo.head_sha()
-        if not sha:
-            return None
-        blob_path = path
-        if at_revision:
-            resolved = self.revision_path(path, sha)
-            if resolved is None:
-                return None
-            blob_path = resolved
-        text = self.repo.get_blob_text(blob_path, sha)
-        if text is None:
-            return None
-        if at_revision:
-            cache_entry = self._merged_history_cache_entry(path)
-            revision = next(
-                (entry.revision for entry in cache_entry.entries if entry.revision.sha == sha),
-                None,
-            )
-            short_sha = revision.short_sha if revision else sha[:7]
-            updated_display, updated_tooltip, _ = self._revision_labels(revision)
-            revision_sha = sha
-        else:
-            index_entry = self.work_index.get_entry(path) if self.work_index else None
-            if index_entry is not None:
-                updated_display, updated_tooltip, short_sha = self._revision_labels_from_entry(
-                    index_entry
-                )
-                revision_sha = index_entry.revision_sha
-            else:
-                revision = self.repo.latest_revision(path, follow=True)
-                updated_display, updated_tooltip, short_sha = self._revision_labels(revision)
-                revision_sha = revision.sha if revision is not None else sha
-        meta = parse_work_cached(
-            text,
-            path=blob_path,
-            sha=sha,
-            fallback_title=Path(path).stem.replace("-", " "),
-        )
-        return WorkView(
-            path=path,
-            path_prefix=path_display_prefix(path),
-            slug=path_to_slug(path),
-            commit_sha=revision_sha,
-            short_sha=short_sha,
-            author=self.work_author(path),
-            words_display=format_words(meta.word_count),
-            updated_display=updated_display,
-            updated_tooltip=updated_tooltip,
-            meta=meta,
-            flags=self.path_flags(path),
-            suppressed=self.is_suppressed(blob_path, revision_sha),
-            at_revision=at_revision,
-        )
-
-    def is_suppressed(self, path: str, sha: str) -> bool:
-        return sha in self.site.suppressed_commits.get(path, set())
-
-    def sanitize_suppressed(self, path: str, suppressed: set[str]) -> set[str]:
-        history = self.repo.file_history(path, follow=True)
-        if not history:
-            return set()
-        latest_sha = history[0].sha
-        valid_shas = {revision.sha for revision in history}
-        return {
-            sha for sha in suppressed if sha in valid_shas and sha != latest_sha
-        }
-
-    def visible_history(self, path: str) -> list[HistoryEntry]:
-        return [
-            entry
-            for entry in self.merged_history(path)
-            if not self.is_suppressed(entry.path, entry.revision.sha)
-        ]
-
-    def can_view_revision(self, path: str, sha: str, *, admin: bool) -> bool:
-        blob_path = self.revision_path(path, sha)
-        if blob_path is None and self.repo.get_blob_text(path, sha) is None:
-            return False
-        if admin:
-            return True
-        if not self.is_published(path):
-            return False
-        return not self.is_suppressed(blob_path or path, sha)

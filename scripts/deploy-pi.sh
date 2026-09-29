@@ -202,8 +202,10 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   else
     echo "PDF_SCRIPTS=$PDF_SCRIPTS_DIR" >>"$APP_DIR/.env"
   fi
-  echo "Review $APP_DIR/.env (paths only; secrets and public URL are set at /setup)." >&2
+  echo "Review $APP_DIR/.env (set PUBLIC_URL for your domain)." >&2
 fi
+chmod 600 "$APP_DIR/.env"
+
 
 echo "==> Installing systemd unit"
 sed "s|/opt/libmyown|$INSTALL_ROOT|g; s|^User=libmyown|User=$LIBMYOWN_USER|; s|^Group=libmyown|Group=$LIBMYOWN_USER|" \
@@ -224,7 +226,9 @@ echo
 "$BIN_DIR/pandoc" --version | head -n 1
 echo
 echo "Next steps:"
-echo "  1. Edit $APP_DIR/.env if needed (paths only; secrets auto-generate on first start)"
+echo "  1. Edit $APP_DIR/.env if needed (set PUBLIC_URL; secrets auto-generate on first start)"
 echo "  2. sudo systemctl restart libmyown"
-echo "  3. Open /setup in a browser"
+echo "  3. On first start the admin password is printed once to the log:"
+echo "       sudo journalctl -u libmyown | grep 'Generated admin password'"
+echo "     Log in at /login and change it under Admin -> Security"
 echo "  4. Point Caddy at 127.0.0.1:8000 (see examples/caddy/Caddyfile)"

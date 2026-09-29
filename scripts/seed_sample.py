@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import sys
@@ -224,26 +225,20 @@ REVISIONS: list[tuple[str, Callable[[Path], list[str]]]] = [
 ]
 
 
-def main() -> None:
-    source = _stories_source()
-    if not source.is_dir():
-        raise SystemExit(f"Stories source not found: {source}")
-
+def seed_repository(repo_path: Path, source: Path) -> tuple[int, int]:
+    """Create a fresh bare repo at repo_path from source; returns (files, revisions)."""
     stories = _collect_markdown(source)
     if not stories:
         raise SystemExit(f"No .md files under {source}")
-
-    data_dir = Path(os.environ.get("DATA_DIR", "data"))
-    repo_path = data_dir / "stories.git"
     repo_path.parent.mkdir(parents=True, exist_ok=True)
     if repo_path.exists():
         shutil.rmtree(repo_path)
-    porcelain.init(str(repo_path), bare=True)
+    porcelain.init(str(repo_path), bare=True).close()
 
     revision_count = 0
     with tempfile.TemporaryDirectory() as tmp:
         worktree = Path(tmp) / "worktree"
-        porcelain.init(str(worktree))
+        porcelain.init(str(worktree)).close()
         added: list[str] = []
         for src in stories:
             rel = src.relative_to(source)
@@ -252,27 +247,40 @@ def main() -> None:
             shutil.copy2(src, dest)
             added.append(str(rel).replace("\\", "/"))
 
-        repo = porcelain.open_repo(str(worktree))
-        _commit(repo, f"Import {len(added)} sample stories", added)
+        with porcelain.open_repo_closing(str(worktree)) as repo:
+            _commit(repo, f"Import {len(added)} sample stories", added)
 
-        for message, apply_revision in REVISIONS:
-            changed = apply_revision(worktree)
-            if changed:
-                _commit(repo, message, changed)
-                revision_count += 1
+            for message, apply_revision in REVISIONS:
+                changed = apply_revision(worktree)
+                if changed:
+                    _commit(repo, message, changed)
+                    revision_count += 1
 
-        porcelain.push(
-            repo,
-            f"file://{repo_path.resolve()}",
-            refspecs=["refs/heads/master:refs/heads/master"],
-        )
+            porcelain.push(
+                repo,
+                f"file://{repo_path.resolve()}",
+                refspecs=["refs/heads/master:refs/heads/master"],
+                outstream=io.BytesIO(),
+                errstream=io.BytesIO(),
+            )
+    return len(added), revision_count
+
+
+def main() -> None:
+    source = _stories_source()
+    if not source.is_dir():
+        raise SystemExit(f"Stories source not found: {source}")
+
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    repo_path = data_dir / "stories.git"
+    file_count, revision_count = seed_repository(repo_path, source)
 
     site_path = data_dir / "site.json"
     site = SiteConfig()
     site.published_directories = {"Series"}
     save_site_config(site_path, site)
 
-    print(f"Seeded {repo_path} with {len(added)} files from {source}")
+    print(f"Seeded {repo_path} with {file_count} files from {source}")
     print(f"Added {revision_count} revision commits (mostly on The Long Draft)")
     print(f"Published Series/ in {site_path}")
 

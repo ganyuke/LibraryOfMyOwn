@@ -95,7 +95,7 @@
     <legend>Assign to works</legend>
     <label>
       <span class="visually-hidden">Flag</span>
-      <select name="flag" onchange="this.form.submit()">
+      <select name="flag" data-autosubmit>
         {% for flag_id, flag in flags.items() %}
         <option value="{{ flag_id }}" {% if flag_id == selected_flag %}selected{% endif %}>{{ flag.label }}</option>
         {% endfor %}
@@ -123,4 +123,7 @@
   <button type="submit" class="admin-btn" form="flags-form">Save</button>
 </p>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ static_url('admin.js') }}" defer></script>
 {% endblock %}

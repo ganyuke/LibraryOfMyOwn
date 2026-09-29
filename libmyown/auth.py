@@ -8,11 +8,18 @@ from libmyown.secrets import Secrets, verify_password
 
 
 SESSION_KEY = "admin"
-SETUP_PATH = "/setup"
+SESSION_EPOCH_KEY = "admin_epoch"
+
+
+def _secrets(request: Request) -> Secrets:
+    return request.app.state.libmyown.secrets
 
 
 def is_admin(request: Request) -> bool:
-    return bool(request.session.get(SESSION_KEY))
+    session = request.session
+    if not session.get(SESSION_KEY):
+        return False
+    return session.get(SESSION_EPOCH_KEY) == _secrets(request).session_epoch
 
 
 def require_admin(request: Request) -> Response | None:
@@ -21,25 +28,20 @@ def require_admin(request: Request) -> Response | None:
     return None
 
 
-def require_setup_complete(secrets: Secrets, request: Request) -> Response | None:
-    if secrets.is_configured:
-        return None
-    if request.url.path.startswith(SETUP_PATH):
-        return None
-    if request.url.path.startswith("/static"):
-        return None
-    return RedirectResponse(SETUP_PATH, status_code=303)
-
-
 def login_admin(request: Request, secrets: Secrets, password: str) -> bool:
     if not secrets.admin_password_hash:
         return False
     if not verify_password(password, secrets.admin_password_hash):
         return False
+    # Start from a clean session so nothing set before login carries over.
+    request.session.clear()
     request.session[SESSION_KEY] = True
+    request.session[SESSION_EPOCH_KEY] = secrets.session_epoch
     rotate_csrf_token(request)
     return True
 
 
 def logout_admin(request: Request) -> None:
     request.session.pop(SESSION_KEY, None)
+    request.session.pop(SESSION_EPOCH_KEY, None)
+    rotate_csrf_token(request)

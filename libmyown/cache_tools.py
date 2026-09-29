@@ -4,9 +4,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from libmyown.git_repo import StoriesRepo
+from libmyown.content import clear_parsed_work_cache
+from libmyown.git_store import GitStore
+from libmyown.service import clear_diff_cache
 from libmyown.site_config import clear_site_config_cache
-from libmyown.work_index import WorkIndexStore
+from libmyown.snapshot import SnapshotHolder, clear_blob_cache
 
 
 @dataclass(frozen=True)
@@ -34,22 +36,25 @@ def clear_pdf_cache(cache_dir: Path) -> int:
         return 0
     removed = 0
     for child in cache_dir.iterdir():
+        if child.name == ".tmp":
+            continue  # builds in progress
         if child.is_dir():
-            shutil.rmtree(child)
+            shutil.rmtree(child, ignore_errors=True)
         else:
-            child.unlink()
+            child.unlink(missing_ok=True)
         removed += 1
     return removed
 
 
-def clear_runtime_caches(
-    repo: StoriesRepo,
-    work_index: WorkIndexStore | None = None,
-) -> None:
-    repo.invalidate()
+def clear_runtime_caches(store: GitStore, snapshots: SnapshotHolder | None = None) -> None:
+    """Drop every in-memory cache and rebuild the work index from scratch."""
+    store.refresh()
     clear_site_config_cache()
-    if work_index is not None:
-        work_index.invalidate()
+    clear_parsed_work_cache()
+    clear_blob_cache()
+    clear_diff_cache()
+    if snapshots is not None:
+        snapshots.rebuild(full=True)
 
 
 def format_bytes(count: int) -> str:

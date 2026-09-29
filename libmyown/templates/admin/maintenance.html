@@ -13,6 +13,21 @@
   {% if message %}<p class="notice">{{ message }}</p>{% endif %}
 
   <fieldset class="admin-panel">
+    <legend>Git repository</legend>
+    <p>{{ repo_packs }} pack{{ "s" if repo_packs != 1 else "" }} · {{ repo_loose }} loose object{{ "s" if repo_loose != 1 else "" }} · {{ repo_size }}</p>
+    {% if last_gc %}
+    <p>Last gc: {{ last_gc.at }} ({{ last_gc.method }}, {{ last_gc.seconds }}s, {{ last_gc.before_size }} → {{ last_gc.after_size }})</p>
+    {% else %}
+    <p>No gc has run yet. One runs automatically every day, and after pushes once packs pile up.</p>
+    {% endif %}
+    <form method="post">
+      {{ csrf_field(csrf_token) }}
+      <input type="hidden" name="action" value="run_git_gc">
+      <button type="submit" class="admin-btn">Run git gc now</button>
+    </form>
+  </fieldset>
+
+  <fieldset class="admin-panel">
     <legend>PDF cache</legend>
     <p>{{ pdf_cache_count }} PDF{{ "s" if pdf_cache_count != 1 else "" }} · {{ pdf_cache_size }}</p>
     <form method="post">

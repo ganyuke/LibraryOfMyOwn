@@ -11,7 +11,6 @@ from libmyown.cache_tools import (
     format_bytes,
     pdf_cache_stats,
 )
-from libmyown.git_repo import StoriesRepo
 
 
 class CacheToolsTests(unittest.TestCase):
@@ -33,23 +32,22 @@ class CacheToolsTests(unittest.TestCase):
 
 
 class RuntimeCacheClearTests(unittest.TestCase):
-    def test_clear_runtime_caches_invalidates_repo_paths(self) -> None:
+    def test_clear_runtime_caches_rebuilds_snapshot(self) -> None:
         from libmyown.cache_tools import clear_runtime_caches
-        import shutil
+        from libmyown.git_store import GitStore
+        from libmyown.snapshot import SnapshotHolder
+        from tests.support import make_data_dir
 
-        root = Path(__file__).resolve().parents[1]
-        stories_src = root / "data" / "stories.git"
-        if not stories_src.is_dir():
-            self.skipTest("fixture stories.git missing")
         with tempfile.TemporaryDirectory() as tmp:
-            repo_path = Path(tmp) / "stories.git"
-            shutil.copytree(stories_src, repo_path)
-            repo = StoriesRepo(repo_path)
-            paths = repo.list_markdown_paths()
-            self.assertIsNotNone(repo._paths_cache)
-            clear_runtime_caches(repo)
-            self.assertIsNone(repo._paths_cache)
-            self.assertEqual(repo.list_markdown_paths(), paths)
+            data_dir = make_data_dir(tmp)
+            store = GitStore(data_dir / "stories.git")
+            self.addCleanup(store.close)
+            holder = SnapshotHolder(store, data_dir / "work-index.json")
+            before = holder.load_or_build()
+            clear_runtime_caches(store, holder)
+            after = holder.current
+            self.assertIsNot(before, after)
+            self.assertEqual(before.entries, after.entries)
 
 
 if __name__ == "__main__":

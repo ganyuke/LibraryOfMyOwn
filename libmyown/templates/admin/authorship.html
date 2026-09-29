@@ -124,41 +124,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
-(function () {
-  const defaultRule = document.getElementById("default-author-rule");
-  const defaultField = document.getElementById("default-author-field");
-  const exceptionMode = document.getElementById("exception-mode");
-  const customField = document.getElementById("exception-custom-field");
-
-  function syncDefaultAuthorField() {
-    if (!defaultRule || !defaultField) {
-      return;
-    }
-    defaultField.hidden = defaultRule.value === "earliest";
-  }
-
-  function syncExceptionCustomField() {
-    if (!exceptionMode || !customField) {
-      return;
-    }
-    const showCustom = exceptionMode.value === "custom";
-    customField.hidden = !showCustom;
-    const input = customField.querySelector("input");
-    if (input) {
-      input.required = showCustom;
-    }
-  }
-
-  if (defaultRule) {
-    defaultRule.addEventListener("change", syncDefaultAuthorField);
-    syncDefaultAuthorField();
-  }
-
-  if (exceptionMode) {
-    exceptionMode.addEventListener("change", syncExceptionCustomField);
-    syncExceptionCustomField();
-  }
-})();
-</script>
+<script src="{{ static_url('admin.js') }}" defer></script>
 {% endblock %}

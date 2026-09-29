@@ -1,6 +1,6 @@
 # Caddy with rate limiting
 
-LibraryOfMyOwn binds to `127.0.0.1:8000` by default and is intended to be used behind a reverse proxy, like [Caddy](https://caddyserver.com/). Caddy provides automatic TLS for LibraryOfMyOwn and forwards the `X-Forwarded-Proto` header so LirbaryOfMyOwn can infer HTTPS for cookies.
+LibraryOfMyOwn binds to `127.0.0.1:8000` by default and is intended to be used behind a reverse proxy, like [Caddy](https://caddyserver.com/). Caddy provides automatic TLS for LibraryOfMyOwn and forwards the `X-Forwarded-Proto` header, which LibraryOfMyOwn trusts only from `TRUSTED_PROXIES` (default `127.0.0.1`).
 
 Caddy does not include ratelimiting out of the box. You need to compile Caddy with a plugin that supports ratelimiting, such as [mholt/caddy-ratelimit](https://github.com/mholt/caddy-ratelimit).
 

@@ -64,30 +64,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
-document.querySelectorAll(".git-remote-copy").forEach(function (button) {
-  button.addEventListener("click", function () {
-    const input = document.getElementById(button.dataset.copyTarget);
-    if (!input) {
-      return;
-    }
-    const value = input.value;
-    const done = function () {
-      const label = button.textContent;
-      button.textContent = "Copied";
-      window.setTimeout(function () {
-        button.textContent = label;
-      }, 1500);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(value).then(done);
-      return;
-    }
-    input.select();
-    input.setSelectionRange(0, value.length);
-    document.execCommand("copy");
-    done();
-  });
-});
-</script>
+<script src="{{ static_url('admin.js') }}" defer></script>
 {% endblock %}

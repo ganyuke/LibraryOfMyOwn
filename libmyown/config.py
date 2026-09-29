@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from libmyown.secrets import Secrets, ensure_secrets
+from libmyown.secrets import Secrets, ensure_secrets, generate_git_password, set_admin_password
 from libmyown.site_config import seed_public_url, seed_stories_branch
 
 # Load .env from the project root (parent of libmyown/).
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(_PROJECT_ROOT / ".env")
+
+
+class ConfigurationError(RuntimeError):
+    """The instance cannot start safely with the current configuration."""
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,9 @@ class Settings:
     port: int
     https_enabled: bool | None
     secrets: Secrets
+    trusted_proxies: str = "127.0.0.1"
+    pdf_cache_max_bytes: int = 512 * 1024 * 1024
+    pdf_timeout_seconds: float = 180.0
 
     @property
     def secrets_path(self) -> Path:
@@ -38,6 +46,10 @@ class Settings:
     @property
     def pdf_cache_dir(self) -> Path:
         return self.data_dir / "pdf-cache"
+
+    @property
+    def maintenance_record_path(self) -> Path:
+        return self.data_dir / "maintenance.json"
 
     @property
     def work_index_path(self) -> Path:
@@ -71,6 +83,44 @@ def _env_bool(name: str) -> bool | None:
     return value in ("1", "true", "yes", "on")
 
 
+def _env_number(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be a number, got {raw!r}") from exc
+
+
+def require_admin_password(secrets: Secrets) -> None:
+    if not secrets.is_configured:
+        raise ConfigurationError(
+            "No admin password is configured. Set ADMIN_PASSWORD in the environment "
+            "(.env) for the first start; it is hashed into secrets.json and can be "
+            "removed from .env afterwards."
+        )
+
+
+def generate_admin_password_if_missing(path: Path, secrets: Secrets) -> str | None:
+    """First start without ADMIN_PASSWORD: create one and print it once to the service log."""
+    if secrets.is_configured:
+        return None
+    password = generate_git_password()
+    set_admin_password(path, secrets, password)
+    print(
+        "\n"
+        "==================== libmyown first start ====================\n"
+        f"  Generated admin password: {password}\n"
+        "  Log in at /login and change it under Admin -> Security.\n"
+        "  It is shown only once and kept only as a hash.\n"
+        "==============================================================\n",
+        file=sys.stderr,
+        flush=True,
+    )
+    return password
+
+
 def load_settings() -> Settings:
     data_dir = Path(os.environ.get("DATA_DIR", "data")).expanduser().resolve()
     pdf_scripts_raw = os.environ.get("PDF_SCRIPTS", "").strip()
@@ -86,6 +136,7 @@ def load_settings() -> Settings:
         env_git_password=os.environ.get("GIT_PASSWORD", "").strip(),
         env_git_username=os.environ.get("GIT_USERNAME", "").strip(),
     )
+    generate_admin_password_if_missing(data_dir / "secrets.json", secrets)
     site_config_path = data_dir / "site.json"
     seed_public_url(
         site_config_path,
@@ -103,4 +154,7 @@ def load_settings() -> Settings:
         port=int(os.environ.get("PORT", "8000")),
         https_enabled=_env_bool("HTTPS_ENABLED"),
         secrets=secrets,
+        trusted_proxies=os.environ.get("TRUSTED_PROXIES", "127.0.0.1").strip() or "127.0.0.1",
+        pdf_cache_max_bytes=int(_env_number("PDF_CACHE_MAX_MB", 512) * 1024 * 1024),
+        pdf_timeout_seconds=_env_number("PDF_BUILD_TIMEOUT", 180),
     )

@@ -15,7 +15,7 @@
     <legend>File</legend>
     <label>
       <span class="visually-hidden">File</span>
-      <select name="path" onchange="this.form.submit()">
+      <select name="path" data-autosubmit>
         {% for path in paths %}
         <option value="{{ path }}" {% if path == selected_path %}selected{% endif %}>{{ path }}</option>
         {% endfor %}
@@ -43,4 +43,7 @@
 </form>
 {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ static_url('admin.js') }}" defer></script>
 {% endblock %}

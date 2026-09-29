@@ -13,10 +13,19 @@ def get_theme(request: Request) -> str:
     return THEME_DARK if value == THEME_DARK else THEME_LIGHT
 
 
+def is_local_path(url: str) -> bool:
+    """Same-origin absolute path; rejects //host and /\\host (browsers treat both as off-site)."""
+    return (
+        url.startswith("/")
+        and not url.startswith(("//", "/\\"))
+        and not any(ch in url for ch in "\r\n\t")
+    )
+
+
 def set_theme_response(*, theme: str, next_url: str, secure: bool = False) -> Response:
     if theme not in (THEME_LIGHT, THEME_DARK):
         theme = THEME_LIGHT
-    if not next_url.startswith("/") or next_url.startswith("//"):
+    if not is_local_path(next_url):
         next_url = "/"
     response = RedirectResponse(next_url, status_code=303)
     response.set_cookie(

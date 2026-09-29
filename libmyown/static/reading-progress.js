@@ -9,7 +9,8 @@
   function readStore() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    } catch {
+      // apparently no var is ES2019 and putting var here lets this js codebase be ES2015 so hehehehe
+    } catch (e) {
       return {};
     }
   }

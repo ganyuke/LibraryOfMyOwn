@@ -32,25 +32,17 @@ class ContinuityStoryOption:
 
 
 def _story_title(service: LibraryService, path: str) -> str:
-    fallback = Path(path).stem.replace("-", " ")
-    if service.work_index is None:
-        return fallback
-    entry = service.work_index.get_entry(path)
-    return entry.title if entry else fallback
+    entry = service.snapshot.entry(path)
+    return entry.title if entry else Path(path).stem.replace("-", " ")
 
 
 def continuity_story_options(service: LibraryService) -> list[ContinuityStoryOption]:
-    paths = service.all_paths()
-    index_entries = (
-        service.work_index.get().entries if service.work_index is not None else {}
-    )
     options: list[ContinuityStoryOption] = []
-    for path in paths:
+    for path in service.all_paths():
         slug = path_to_slug(path)
         if not slug:
             continue
-        entry = index_entries.get(path)
-        title = entry.title if entry else _story_title(service, path)
+        title = _story_title(service, path)
         options.append(
             ContinuityStoryOption(
                 path=path,

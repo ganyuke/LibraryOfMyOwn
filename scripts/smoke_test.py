@@ -13,14 +13,12 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("ADMIN_PASSWORD", "test-password")
 os.environ.setdefault("GIT_PASSWORD", "test-git-password")
-os.environ.setdefault("ORIGIN", "http://127.0.0.1:8000")
 
 from starlette.testclient import TestClient
 
 from libmyown.app import create_app
 from libmyown.config import load_settings
-from libmyown.git_repo import StoriesRepo, path_to_slug
-from libmyown.pdf import discover_pdf_options
+from libmyown.git_repo import path_to_slug
 from libmyown.secrets import ensure_secrets, set_admin_password
 from libmyown.site_config import SiteConfig, load_site_config, save_site_config
 
@@ -68,10 +66,8 @@ def main() -> int:
             return 1
         print(f"OK {path}")
 
-    site = load_site_config(settings.site_config_path)
-    branch = site.stories_branch.strip() or None
-    repo = StoriesRepo(settings.stories_repo, branch=branch)
-    history = repo.file_history("Series/The Long Draft.md")
+    state = app.state.libmyown
+    history = state.snapshot().file_history("Series/The Long Draft.md", follow=False)
     if len(history) >= 2:
         old_rev = history[1].short_sha
         r = client.get(f"/works/series/the-long-draft/r/{old_rev}")
@@ -92,7 +88,7 @@ def main() -> int:
         print("OK compare page")
 
     work_page = client.get("/works/series/the-long-draft")
-    pdf_options = discover_pdf_options(settings.pdf_scripts)
+    pdf_options = state.pdf.options()
     if pdf_options:
         if pdf_options[0].id != "digital":
             print(f"FAIL expected digital first, got {pdf_options[0].id}")
@@ -198,14 +194,12 @@ def main() -> int:
             print("FAIL history merge redirect")
             return 1
 
-        site = load_site_config(settings.site_config_path)
-    branch = site.stories_branch.strip() or None
-    repo = StoriesRepo(settings.stories_repo, branch=branch)
+        snapshot = state.snapshot()
         expected_revisions = len(
             {
                 rev.sha
                 for path in ("Series/Sample One.md", "Series/Sample Two.md")
-                for rev in repo.file_history(path)
+                for rev in snapshot.file_history(path, follow=False)
             }
         )
         r = client.get(f"/works/{dest_slug}/history")

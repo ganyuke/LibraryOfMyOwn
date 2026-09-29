@@ -4,11 +4,13 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from libmyown.fsutil import atomic_write_text
 
 
 SCRYPT_N = 2**14
@@ -24,6 +26,7 @@ class Secrets:
     git_password: str
     git_username: str = "git"
     created_at: str = ""
+    session_epoch: int = 0
 
     @property
     def is_configured(self) -> bool:
@@ -31,6 +34,14 @@ class Secrets:
 
     def git_remote_url(self, origin: str) -> str:
         return f"{origin.rstrip('/')}/git/stories.git"
+
+    def git_credentials_match(self, username: str, password: str) -> bool:
+        """Constant-time check; an unset password never matches."""
+        if not self.git_password:
+            return False
+        user_ok = hmac.compare_digest(username.encode("utf-8"), self.git_username.encode("utf-8"))
+        pass_ok = hmac.compare_digest(password.encode("utf-8"), self.git_password.encode("utf-8"))
+        return user_ok and pass_ok
 
 
 def _now_iso() -> str:
@@ -79,20 +90,21 @@ def generate_session_secret() -> str:
     return secrets.token_urlsafe(32)
 
 
+_WRITE_LOCK = threading.Lock()
+
+
 def _write_secrets(path: Path, secrets_data: Secrets) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    payload: dict[str, object] = {
         "session_secret": secrets_data.session_secret,
         "admin_password_hash": secrets_data.admin_password_hash,
         "git_password": secrets_data.git_password,
         "git_username": secrets_data.git_username,
         "created_at": secrets_data.created_at or _now_iso(),
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    if secrets_data.session_epoch:
+        payload["session_epoch"] = secrets_data.session_epoch
+    with _WRITE_LOCK:
+        atomic_write_text(path, json.dumps(payload, indent=2) + "\n", mode=0o600)
 
 
 def load_secrets(path: Path) -> Secrets | None:
@@ -105,7 +117,15 @@ def load_secrets(path: Path) -> Secrets | None:
         git_password=str(data.get("git_password", "")),
         git_username=str(data.get("git_username", "git") or "git"),
         created_at=str(data.get("created_at", "")),
+        session_epoch=_int_or_zero(data.get("session_epoch", 0)),
     )
+
+
+def _int_or_zero(value: object) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
 
 
 def save_secrets(path: Path, secrets_data: Secrets) -> None:
@@ -129,6 +149,9 @@ def ensure_secrets(
             updated = True
         if not existing.git_password:
             existing.git_password = env_git_password or generate_git_password()
+            updated = True
+        if not existing.admin_password_hash and env_admin_password:
+            existing.admin_password_hash = hash_password(env_admin_password)
             updated = True
         if updated:
             save_secrets(path, existing)
@@ -166,5 +189,12 @@ def rotate_git_password(path: Path, secrets_data: Secrets) -> tuple[Secrets, str
 
 def rotate_session_secret(path: Path, secrets_data: Secrets) -> Secrets:
     secrets_data.session_secret = generate_session_secret()
+    save_secrets(path, secrets_data)
+    return secrets_data
+
+
+def revoke_admin_sessions(path: Path, secrets_data: Secrets) -> Secrets:
+    """Invalidate every signed-in admin session immediately, no restart needed."""
+    secrets_data.session_epoch += 1
     save_secrets(path, secrets_data)
     return secrets_data

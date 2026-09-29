@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import copy
 import json
 import re
+import threading
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from libmyown.authorship import AUTHOR_MODE_DEFAULT, AUTHOR_MODE_EARLIEST
 from libmyown.content import resolve_crosspost_url
+from libmyown.fsutil import atomic_write_text
 
 
 @dataclass
@@ -350,6 +354,15 @@ class SiteConfig:
         return links
 
 
+_FLAG_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}|[a-zA-Z]{1,30}")
+
+
+def normalize_flag_color(raw: str) -> str:
+    """Flag colors land in a style attribute; allow only hex codes and CSS color names."""
+    value = raw.strip()
+    return value if _FLAG_COLOR_RE.fullmatch(value) else ""
+
+
 def normalize_flag_id(raw: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
 
@@ -389,7 +402,8 @@ def seed_stories_branch(path: Path, *, env_stories_branch: str = "") -> None:
     save_site_config(path, site)
 
 
-_site_cache: tuple[str, float, SiteConfig] | None = None
+_site_cache: tuple[str, tuple[int, int], SiteConfig] | None = None
+_site_lock = threading.Lock()
 
 
 def clear_site_config_cache() -> None:
@@ -403,27 +417,63 @@ def site_config_mtime(path: Path) -> float:
     return path.stat().st_mtime
 
 
+def _file_signature(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return (0, -1)
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def load_site_config(path: Path) -> SiteConfig:
+    """Return the cached config. Treat it as read-only; edit a deepcopy (see ConfigStore.edit)."""
     global _site_cache
-    mtime = site_config_mtime(path)
+    signature = _file_signature(path)
     cache_key = str(path.resolve())
-    if _site_cache is not None:
-        cached_path, cached_mtime, cached_site = _site_cache
-        if cached_path == cache_key and cached_mtime == mtime:
+    cached = _site_cache
+    if cached is not None:
+        cached_path, cached_signature, cached_site = cached
+        if cached_path == cache_key and cached_signature == signature:
             return cached_site
-    if not path.is_file():
+    if signature[1] < 0:
         config = default_site_config()
     else:
         data = json.loads(path.read_text(encoding="utf-8"))
         config = SiteConfig.from_dict(data)
-    _site_cache = (cache_key, mtime, config)
+    _site_cache = (cache_key, signature, config)
     return config
 
 
 def save_site_config(path: Path, config: SiteConfig) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(config.to_dict(), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    clear_site_config_cache()
+    with _site_lock:
+        atomic_write_text(
+            path,
+            json.dumps(config.to_dict(), indent=2, ensure_ascii=False) + "\n",
+        )
+        clear_site_config_cache()
+
+
+class AbortEdit(Exception):
+    """Raise inside ConfigStore.edit() to leave site.json untouched."""
+
+
+class ConfigStore:
+    """site.json access: shared read-only snapshots, serialized copy-on-write edits."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._edit_lock = threading.Lock()
+
+    def get(self) -> SiteConfig:
+        return load_site_config(self.path)
+
+    def signature(self) -> tuple[int, int]:
+        return _file_signature(self.path)
+
+    @contextmanager
+    def edit(self) -> Iterator[SiteConfig]:
+        """Yield a private copy; it is saved only if the block exits without raising."""
+        with self._edit_lock:
+            site = copy.deepcopy(self.get())
+            yield site
+            save_site_config(self.path, site)

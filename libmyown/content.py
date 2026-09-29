@@ -8,6 +8,8 @@ from typing import Any
 import markdown
 import yaml
 
+from libmyown.lru import LRUCache
+
 BULLET_RE = re.compile(r"^\s*[-*•–—]\s*(.+?)\s*$")
 KEY_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 _-]*?)\s*:\s*(.*?)\s*$")
 AO3_HOST = "archiveofourown.org"
@@ -332,7 +334,8 @@ def parse_work(text: str, *, fallback_title: str) -> WorkMeta:
     )
 
 
-_PARSED_WORK_CACHE: dict[tuple[str, str], WorkMeta] = {}
+# Keyed by (path, commit sha): immutable, so entries never go stale, only age out.
+_PARSED_WORK_CACHE: LRUCache[WorkMeta] = LRUCache(128)
 
 
 def clear_parsed_work_cache() -> None:
@@ -346,13 +349,9 @@ def parse_work_cached(
     sha: str,
     fallback_title: str,
 ) -> WorkMeta:
-    key = (path, sha)
-    cached = _PARSED_WORK_CACHE.get(key)
-    if cached is not None:
-        return cached
-    meta = parse_work(text, fallback_title=fallback_title)
-    _PARSED_WORK_CACHE[key] = meta
-    return meta
+    return _PARSED_WORK_CACHE.get_or_compute(
+        (path, sha), lambda: parse_work(text, fallback_title=fallback_title)
+    )
 
 
 def extract_work_body(text: str) -> str:

@@ -16,7 +16,7 @@
     <legend>Story</legend>
     <label>
       <span class="visually-hidden">Story</span>
-      <select name="story" onchange="this.form.submit()">
+      <select name="story" data-autosubmit>
         <option value="">Choose a story…</option>
         {% for story in stories %}
         <option value="{{ story.slug }}" {% if story.slug == selected_slug %}selected{% endif %}>{{ story.title }} ({{ story.path }})</option>
@@ -63,4 +63,7 @@
 </form>
 {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ static_url('admin.js') }}" defer></script>
 {% endblock %}
