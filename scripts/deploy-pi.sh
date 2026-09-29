@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Install LibraryOfMyOwn under /opt/libmyown on Linux (auto-detects CPU arch).
-# Bundles uv, typst and pandoc; uv installs Python and the pinned dependencies
-# from uv.lock. pdf-scripts ship with the repo.
+# Install or update LibraryOfMyOwn under /opt/libmyown on Linux.
+# Everything it needs (Python, typst, pandoc) is installed alongside it.
 #
 # Usage (from an existing clone):
-#   sudo ./scripts/deploy-pi.sh
+#   sudo ./scripts/deploy-pi.sh [-y]
 #
 # Bootstrap on a fresh system (no clone yet):
 #   curl -fsSL https://raw.githubusercontent.com/ganyuke/LibraryOfMyOwn/main/scripts/deploy-pi.sh | sudo bash
+#
+# Options:
+#   -y, --yes    answer yes to every question (for unattended runs)
+#   -h, --help   show this help
 #
 # Optional:
 #   REPO_URL=git@github.com:ganyuke/LibraryOfMyOwn.git  git remote (default: GitHub HTTPS or origin of this checkout)
@@ -22,6 +25,43 @@
 #   UV_URL=...                                          override uv download URL
 
 set -euo pipefail
+
+ASSUME_YES=0
+for arg in "$@"; do
+  case "$arg" in
+    -y | --yes) ASSUME_YES=1 ;;
+    -h | --help)
+      sed -n '2,/^$/s/^# \{0,1\}//p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null \
+        || echo "Usage: deploy-pi.sh [-y]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg (try --help)" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Ask on the terminal even when the script itself arrives on stdin (curl | bash).
+confirm() {
+  local reply
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    return 0
+  fi
+  if ! { exec 3</dev/tty; } 2>/dev/null; then
+    echo "$1 No terminal to ask on, so stopping here. Run again with -y to continue." >&2
+    return 1
+  fi
+  read -r -p "$1 [y/N] " reply <&3 || reply=""
+  exec 3<&-
+  [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+# Remember this script's contents before `git pull` can replace the file.
+SELF_SUM=""
+if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+  SELF_SUM="$(sha256sum < "${BASH_SOURCE[0]}")"
+fi
 
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/libmyown}"
 LIBMYOWN_USER="${LIBMYOWN_USER:-libmyown}"
@@ -133,6 +173,34 @@ if ! id "$LIBMYOWN_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$INSTALL_ROOT" --shell /usr/sbin/nologin "$LIBMYOWN_USER"
 fi
 
+echo "==> Application source ($REPO_URL @ $GIT_REF)"
+if [[ -d "$APP_DIR/.git" ]]; then
+  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
+  git_app fetch origin
+  git_app checkout "$GIT_REF"
+  git_app pull --ff-only origin "$GIT_REF"
+elif [[ -d "$APP_DIR" ]] && [[ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]]; then
+  echo "$APP_DIR exists but is not a git checkout. Move it aside or remove it, then re-run." >&2
+  exit 1
+else
+  install -d -m 755 "$(dirname "$APP_DIR")"
+  git clone --branch "$GIT_REF" "$REPO_URL" "$APP_DIR"
+  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
+fi
+
+# An update can change this script. Finish with the new version so its install
+# steps match the code that was just pulled.
+if [[ -z "${LIBMYOWN_DEPLOY_REEXEC:-}" && -n "$SELF_SUM" ]] \
+  && [[ "$(sha256sum < "$APP_DIR/scripts/deploy-pi.sh")" != "$SELF_SUM" ]]; then
+  echo "==> The code being installed comes with a different version of this deploy script"
+  if ! confirm "Continue with the new version?"; then
+    echo "Stopped. The new code is checked out but not installed yet. Run the script again to finish." >&2
+    exit 1
+  fi
+  export LIBMYOWN_DEPLOY_REEXEC=1
+  exec bash "$APP_DIR/scripts/deploy-pi.sh" "$@"
+fi
+
 echo "==> Installing typst ($TYPST_URL)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -163,21 +231,6 @@ if [[ -z "$uv_bin" ]]; then
   exit 1
 fi
 install -m 755 "$uv_bin" "$BIN_DIR/uv"
-
-echo "==> Application source ($REPO_URL @ $GIT_REF)"
-if [[ -d "$APP_DIR/.git" ]]; then
-  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
-  git_app fetch origin
-  git_app checkout "$GIT_REF"
-  git_app pull --ff-only origin "$GIT_REF"
-elif [[ -d "$APP_DIR" ]] && [[ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]]; then
-  echo "$APP_DIR exists but is not a git checkout. Move it aside or remove it, then re-run." >&2
-  exit 1
-else
-  install -d -m 755 "$(dirname "$APP_DIR")"
-  git clone --branch "$GIT_REF" "$REPO_URL" "$APP_DIR"
-  chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
-fi
 
 if [[ ! -f "$APP_DIR/uv.lock" ]]; then
   echo "Checkout at $APP_DIR is missing uv.lock." >&2
