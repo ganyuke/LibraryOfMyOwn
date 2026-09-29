@@ -1127,6 +1127,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
 
     def on_git_receive() -> None:
         repo.invalidate()
+        repo.repack()
         site = get_site()
         if not site.stories_branch.strip():
             branch = repo.head_branch_name()

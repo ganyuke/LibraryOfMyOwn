@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Callable
 
+from dulwich.repo import Repo
 from dulwich.server import Backend
 from dulwich.web import make_wsgi_chain
 
@@ -12,9 +13,43 @@ from libmyown.git_repo import StoriesRepo
 class SingleRepoBackend(Backend):
     def __init__(self, stories_repo: StoriesRepo) -> None:
         self._stories_repo = stories_repo
+        self._detached: list[Repo] = []
 
     def open_repository(self, path: str):
-        return self._stories_repo.open()
+        repo = self._stories_repo.open_detached()
+        self._detached.append(repo)
+        return repo
+
+    def close_detached(self) -> None:
+        while self._detached:
+            self._detached.pop().close()
+
+
+class _CloseWhenDone:
+    def __init__(self, iterable, close) -> None:
+        self._iterator = iter(iterable)
+        self._iterable = iterable
+        self._close = close
+        self._closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self._iterator)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        closer = getattr(self._iterable, "close", None)
+        if closer is not None:
+            closer()
+        self._close()
 
 
 def _basic_auth_ok(environ: dict, username: str, password: str) -> bool:
@@ -41,8 +76,8 @@ class AuthenticatedGitApp:
         self._password = password
         self._on_receive = on_receive
 
-        backend = SingleRepoBackend(repo)
-        self._inner = make_wsgi_chain(backend)
+        self._backend = SingleRepoBackend(repo)
+        self._inner = make_wsgi_chain(self._backend)
 
     def _credentials(self) -> tuple[str, str]:
         user = self._username() if callable(self._username) else self._username
@@ -64,13 +99,25 @@ class AuthenticatedGitApp:
         method = environ.get("REQUEST_METHOD", "GET")
         path_info = environ.get("PATH_INFO", "")
 
-        result = self._inner(environ, start_response)
+        try:
+            result = self._inner(environ, start_response)
+        except BaseException:
+            self._backend.close_detached()
+            raise
         if method == "POST" and path_info.endswith("/git-receive-pack"):
-            chunks = list(result)
+            try:
+                chunks = list(result)
+            finally:
+                try:
+                    closer = getattr(result, "close", None)
+                    if closer is not None:
+                        closer()
+                finally:
+                    self._backend.close_detached()
             if self._on_receive:
                 self._on_receive()
             return chunks
-        return result
+        return _CloseWhenDone(result, self._backend.close_detached)
 
 
 def mount_path_for_git() -> str:

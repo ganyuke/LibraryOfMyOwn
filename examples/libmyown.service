@@ -12,6 +12,7 @@ EnvironmentFile=/opt/libmyown/app/.env
 ExecStart=/opt/libmyown/venv/bin/python -m libmyown.main
 Restart=on-failure
 RestartSec=5
+LimitNOFILE=8192
 
 # Hardening (compatible with /opt layout)
 NoNewPrivileges=true

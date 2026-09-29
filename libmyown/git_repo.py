@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
+import shutil
+import subprocess
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -10,6 +15,8 @@ from dulwich import porcelain
 from dulwich.objects import Commit, Tree
 from dulwich.repo import Repo
 from dulwich.walk import Walker
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,10 @@ class StoriesRepo:
         self._latest_cache: dict[tuple[str, bool, str | None], FileRevision | None] = {}
         self._paths_cache: tuple[str, list[str]] | None = None
         self._slug_map_cache: tuple[str, dict[str, str]] | None = None
+        self._repo: Repo | None = None
+        self._depth = 0
+        self._retired: list[Repo] = []
+        self._lock = threading.Lock()
         self._ensure_repo()
 
     @property
@@ -47,12 +58,91 @@ class StoriesRepo:
     def _ensure_repo(self) -> None:
         if not self.repo_path.exists():
             self.repo_path.parent.mkdir(parents=True, exist_ok=True)
-            porcelain.init(str(self.repo_path), bare=True)
+            created = porcelain.init(str(self.repo_path), bare=True)
+            if created is not None:
+                created.close()
 
-    def open(self) -> Repo:
+    @contextmanager
+    def open(self) -> Iterator[Repo]:
+        """Reuse one repo for reads. Close it only after in-flight readers finish."""
+        with self._lock:
+            if self._repo is None:
+                self._ensure_repo()
+                self._repo = Repo(str(self.repo_path))
+            repo = self._repo
+            self._depth += 1
+        try:
+            yield repo
+        finally:
+            with self._lock:
+                self._depth -= 1
+                if self._depth == 0:
+                    self._close_retired()
+
+    def open_detached(self) -> Repo:
+        """Open a repo the caller must close. Used for git receive/upload."""
+        self._ensure_repo()
         return Repo(str(self.repo_path))
 
+    def _close_retired(self) -> None:
+        retired = self._retired
+        self._retired = []
+        for repo in retired:
+            repo.close()
+
+    def close(self) -> None:
+        with self._lock:
+            if self._depth != 0:
+                return
+            if self._repo is not None:
+                self._retired.append(self._repo)
+                self._repo = None
+            self._close_retired()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            return
+
+    def repack(self) -> None:
+        """Combine pack files so one reader does not keep a descriptor per push."""
+        with self._lock:
+            if self._depth != 0:
+                return
+            if self._repo is not None:
+                self._retired.append(self._repo)
+                self._repo = None
+            self._close_retired()
+        pack_dir = self.repo_path / "objects" / "pack"
+        if not pack_dir.is_dir() or len(list(pack_dir.glob("*.pack"))) <= 1:
+            return
+        git = shutil.which("git")
+        if git is not None:
+            try:
+                subprocess.run(
+                    [git, "-C", str(self.repo_path), "repack", "-ad", "--quiet"],
+                    check=True,
+                    capture_output=True,
+                )
+                return
+            except (OSError, subprocess.CalledProcessError) as exc:
+                logger.warning("git repack failed for %s: %s", self.repo_path, exc)
+        repo = self.open_detached()
+        try:
+            repo.object_store.repack()
+        except Exception as exc:
+            logger.warning("repack failed for %s: %s", self.repo_path, exc)
+        finally:
+            repo.close()
+
     def invalidate(self) -> None:
+        with self._lock:
+            if self._repo is not None:
+                self._retired.append(self._repo)
+                self._repo = None
+            if self._depth == 0:
+                self._close_retired()
         self._generation += 1
         self._history_cache.clear()
         self._latest_cache.clear()
@@ -65,7 +155,10 @@ class StoriesRepo:
         clear_merged_history_cache()
 
     def head_sha(self) -> str | None:
-        repo = self.open()
+        with self.open() as repo:
+            return self._head_sha(repo)
+
+    def _head_sha(self, repo: Repo) -> str | None:
         if self._branch:
             try:
                 return repo.refs[f"refs/heads/{self._branch}".encode()].decode("ascii")
@@ -77,28 +170,28 @@ class StoriesRepo:
             return None
 
     def head_branch_name(self) -> str | None:
-        repo = self.open()
-        if self._branch:
-            ref_name = f"refs/heads/{self._branch}".encode()
-            if ref_name in repo.refs:
-                return self._branch
-        try:
-            ref = repo.refs.follow(b"HEAD")
-        except Exception:
+        with self.open() as repo:
+            if self._branch:
+                ref_name = f"refs/heads/{self._branch}".encode()
+                if ref_name in repo.refs:
+                    return self._branch
+            try:
+                ref = repo.refs.follow(b"HEAD")
+            except Exception:
+                return None
+            if isinstance(ref, tuple):
+                ref = ref[0]
+            if isinstance(ref, bytes) and ref.startswith(b"refs/heads/"):
+                return ref.removeprefix(b"refs/heads/").decode("ascii")
             return None
-        if isinstance(ref, tuple):
-            ref = ref[0]
-        if isinstance(ref, bytes) and ref.startswith(b"refs/heads/"):
-            return ref.removeprefix(b"refs/heads/").decode("ascii")
-        return None
 
     def list_branch_names(self) -> list[str]:
-        repo = self.open()
-        names: list[str] = []
-        for ref in repo.refs.keys():
-            if ref.startswith(b"refs/heads/"):
-                names.append(ref.removeprefix(b"refs/heads/").decode("ascii"))
-        return sorted(names)
+        with self.open() as repo:
+            names: list[str] = []
+            for ref in repo.refs.keys():
+                if ref.startswith(b"refs/heads/"):
+                    names.append(ref.removeprefix(b"refs/heads/").decode("ascii"))
+            return sorted(names)
 
     def list_markdown_paths(self, commit_sha: str | None = None) -> list[str]:
         sha = commit_sha or self.head_sha()
@@ -108,15 +201,15 @@ class StoriesRepo:
             cached_sha, cached_paths = self._paths_cache
             if cached_sha == sha:
                 return cached_paths
-        repo = self.open()
-        commit = repo[sha.encode("ascii")]
-        if not isinstance(commit, Commit):
-            return []
-        paths: list[str] = []
-        tree = repo[commit.tree]
-        if isinstance(tree, Tree):
-            self._walk_tree(repo, "", commit.tree, paths)
-        paths = sorted(paths)
+        with self.open() as repo:
+            commit = repo[sha.encode("ascii")]
+            if not isinstance(commit, Commit):
+                return []
+            paths: list[str] = []
+            tree = repo[commit.tree]
+            if isinstance(tree, Tree):
+                self._walk_tree(repo, "", commit.tree, paths)
+            paths = sorted(paths)
         if commit_sha is None:
             self._paths_cache = (sha, paths)
             self._slug_map_cache = None
@@ -151,11 +244,22 @@ class StoriesRepo:
             elif name.endswith(".md"):
                 paths.append(full)
 
-    def get_blob_text(self, path: str, commit_sha: str | None = None) -> str | None:
-        sha = commit_sha or self.head_sha()
+    def get_blob_text(
+        self,
+        path: str,
+        commit_sha: str | None = None,
+        *,
+        repo: Repo | None = None,
+    ) -> str | None:
+        if repo is not None:
+            return self._blob_text(repo, path, commit_sha)
+        with self.open() as opened:
+            return self._blob_text(opened, path, commit_sha)
+
+    def _blob_text(self, repo: Repo, path: str, commit_sha: str | None) -> str | None:
+        sha = commit_sha or self._head_sha(repo)
         if not sha:
             return None
-        repo = self.open()
         commit = repo[sha.encode("ascii")]
         if not isinstance(commit, Commit):
             return None
@@ -192,14 +296,14 @@ class StoriesRepo:
         sha = self.head_sha()
         if not sha:
             return []
-        repo = self.open()
-        paths: set[str] = set()
-        for entry in Walker(repo, include=[sha.encode()], max_entries=max_commits):
-            commit = entry.commit
-            if commit is None:
-                continue
-            self._collect_md_paths(repo, commit.tree, paths)
-        return sorted(paths)
+        with self.open() as repo:
+            paths: set[str] = set()
+            for entry in Walker(repo, include=[sha.encode()], max_entries=max_commits):
+                commit = entry.commit
+                if commit is None:
+                    continue
+                self._collect_md_paths(repo, commit.tree, paths)
+            return sorted(paths)
 
     def _collect_md_paths(
         self, repo: Repo, tree_sha: bytes, paths: set[str], prefix: str = ""
@@ -228,26 +332,26 @@ class StoriesRepo:
             latest = full[0]
             self._latest_cache[cache_key] = latest
             return latest
-        repo = self.open()
-        for entry in Walker(
-            repo,
-            include=[sha.encode()],
-            paths=[path.encode("utf-8")],
-            follow=follow,
-            max_entries=1,
-        ):
-            commit = entry.commit
-            if commit is None:
-                break
-            commit_sha = commit.id.decode("ascii")
-            blob_path = path
-            if self.get_blob_text(blob_path, commit_sha) is None:
-                blob_path = self._blob_path_in_commit(entry, path) or path
-            latest = self._revision_from_commit(commit, blob_path=blob_path)
-            self._latest_cache[cache_key] = latest
-            return latest
-        self._latest_cache[cache_key] = None
-        return None
+        with self.open() as repo:
+            for entry in Walker(
+                repo,
+                include=[sha.encode()],
+                paths=[path.encode("utf-8")],
+                follow=follow,
+                max_entries=1,
+            ):
+                commit = entry.commit
+                if commit is None:
+                    break
+                commit_sha = commit.id.decode("ascii")
+                blob_path = path
+                if self.get_blob_text(blob_path, commit_sha, repo=repo) is None:
+                    blob_path = self._blob_path_in_commit(entry, path, repo) or path
+                latest = self._revision_from_commit(commit, blob_path=blob_path)
+                self._latest_cache[cache_key] = latest
+                return latest
+            self._latest_cache[cache_key] = None
+            return None
 
     def file_history(self, path: str, *, follow: bool = False) -> list[FileRevision]:
         sha = self.head_sha()
@@ -257,41 +361,44 @@ class StoriesRepo:
         cached = self._history_cache.get(cache_key)
         if cached is not None:
             return cached
-        repo = self.open()
-        revisions: list[FileRevision] = []
-        current_path = path
-        for entry in Walker(
-            repo,
-            include=[sha.encode()],
-            paths=[path.encode("utf-8")],
-            follow=follow,
-            max_entries=500,
-        ):
-            commit = entry.commit
-            if commit is None:
-                continue
-            commit_sha = commit.id.decode("ascii")
-            blob_path = current_path
-            if self.get_blob_text(blob_path, commit_sha) is None:
-                blob_path = self._blob_path_in_commit(entry, current_path) or current_path
-            revisions.append(
-                self._revision_from_commit(commit, blob_path=blob_path)
-            )
-            if follow:
-                current_path = self._prior_path(entry, current_path)
-        self._history_cache[cache_key] = revisions
-        return revisions
+        with self.open() as repo:
+            revisions: list[FileRevision] = []
+            current_path = path
+            for entry in Walker(
+                repo,
+                include=[sha.encode()],
+                paths=[path.encode("utf-8")],
+                follow=follow,
+                max_entries=500,
+            ):
+                commit = entry.commit
+                if commit is None:
+                    continue
+                commit_sha = commit.id.decode("ascii")
+                blob_path = current_path
+                if self.get_blob_text(blob_path, commit_sha, repo=repo) is None:
+                    blob_path = (
+                        self._blob_path_in_commit(entry, current_path, repo) or current_path
+                    )
+                revisions.append(
+                    self._revision_from_commit(commit, blob_path=blob_path)
+                )
+                if follow:
+                    current_path = self._prior_path(entry, current_path)
+            self._history_cache[cache_key] = revisions
+            return revisions
 
-    def _blob_path_in_commit(self, entry, current_path: str) -> str | None:
+    def _blob_path_in_commit(self, entry, current_path: str, repo: Repo) -> str | None:
         for change in entry.changes():
             old_path = change.old.path.decode() if change.old else None
             new_path = change.new.path.decode() if change.new else None
+            commit_sha = entry.commit.id.decode("ascii")
             if new_path == current_path and self.get_blob_text(
-                new_path, entry.commit.id.decode("ascii")
+                new_path, commit_sha, repo=repo
             ):
                 return new_path
             if old_path == current_path and self.get_blob_text(
-                old_path, entry.commit.id.decode("ascii")
+                old_path, commit_sha, repo=repo
             ):
                 return old_path
         return None
@@ -309,32 +416,32 @@ class StoriesRepo:
         return self.latest_revision(path) is not None
 
     def commit_date(self, sha: str) -> datetime | None:
-        repo = self.open()
-        try:
-            commit = repo[sha.encode("ascii")]
-        except KeyError:
-            return None
-        return self._commit_date(commit)
+        with self.open() as repo:
+            try:
+                commit = repo[sha.encode("ascii")]
+            except KeyError:
+                return None
+            return self._commit_date(commit)
 
     def resolve_sha(self, partial: str) -> str | None:
         if not partial:
             return self.head_sha()
-        repo = self.open()
-        try:
-            if partial.encode("ascii") in repo:
-                return partial
-        except Exception:
-            pass
-        matches: list[str] = []
-        tip = self.head_sha()
-        include = [tip.encode()] if tip else []
-        for entry in Walker(repo, include=include, max_entries=500):
-            sha = entry.commit.id.decode("ascii")
-            if sha.startswith(partial):
-                matches.append(sha)
-        if len(matches) == 1:
-            return matches[0]
-        return None
+        with self.open() as repo:
+            try:
+                if partial.encode("ascii") in repo:
+                    return partial
+            except Exception:
+                pass
+            matches: list[str] = []
+            tip = self._head_sha(repo)
+            include = [tip.encode()] if tip else []
+            for entry in Walker(repo, include=include, max_entries=500):
+                sha = entry.commit.id.decode("ascii")
+                if sha.startswith(partial):
+                    matches.append(sha)
+            if len(matches) == 1:
+                return matches[0]
+            return None
 
     @staticmethod
     def _commit_author_identity(commit: Commit) -> str:
@@ -349,14 +456,14 @@ class StoriesRepo:
         sha = self.head_sha()
         if not sha:
             return []
-        repo = self.open()
-        identities: set[str] = set()
-        for entry in Walker(repo, include=[sha.encode()], max_entries=max_commits):
-            commit = entry.commit
-            if commit is None:
-                continue
-            identities.add(self._commit_author_identity(commit))
-        return sorted(identities)
+        with self.open() as repo:
+            identities: set[str] = set()
+            for entry in Walker(repo, include=[sha.encode()], max_entries=max_commits):
+                commit = entry.commit
+                if commit is None:
+                    continue
+                identities.add(self._commit_author_identity(commit))
+            return sorted(identities)
 
     def _revision_from_commit(
         self, commit: Commit, *, blob_path: str

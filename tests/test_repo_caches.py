@@ -21,6 +21,7 @@ class RepoPathCacheTests(unittest.TestCase):
         data_dir = Path(tmp) / "data"
         shutil.copytree(stories_src, data_dir / "stories.git")
         self.repo = StoriesRepo(data_dir / "stories.git")
+        self.addCleanup(self.repo.close)
 
     def test_list_markdown_paths_reuses_cache(self) -> None:
         first = self.repo.list_markdown_paths()
@@ -42,6 +43,25 @@ class RepoPathCacheTests(unittest.TestCase):
         paths = self.repo.list_markdown_paths()
         slug = path_to_slug(paths[0])
         self.assertEqual(self.repo.resolve_path_slug(slug), paths[0])
+
+    def test_repeated_reads_do_not_leak_descriptors(self) -> None:
+        fd_dir = Path("/proc/self/fd")
+        if not fd_dir.is_dir():
+            self.skipTest("file descriptor listing is unavailable")
+        paths = self.repo.list_markdown_paths()
+        self.repo.invalidate()
+
+        def fd_count() -> int:
+            return len(list(fd_dir.iterdir()))
+
+        before = fd_count()
+        for _ in range(25):
+            self.repo.head_sha()
+            self.repo.list_markdown_paths()
+            if paths:
+                self.repo.file_history(paths[0], follow=True)
+            self.repo.invalidate()
+        self.assertLess(fd_count() - before, 12)
 
 
 if __name__ == "__main__":
