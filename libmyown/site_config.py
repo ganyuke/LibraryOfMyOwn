@@ -391,17 +391,6 @@ def seed_public_url(path: Path, *, env_public_url: str = "") -> None:
     save_site_config(path, site)
 
 
-def seed_stories_branch(path: Path, *, env_stories_branch: str = "") -> None:
-    branch = env_stories_branch.strip()
-    if not branch:
-        return
-    site = load_site_config(path)
-    if site.stories_branch.strip():
-        return
-    site.stories_branch = branch
-    save_site_config(path, site)
-
-
 _site_cache: tuple[str, tuple[int, int], SiteConfig] | None = None
 _site_lock = threading.Lock()
 

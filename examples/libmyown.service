@@ -12,14 +12,61 @@ EnvironmentFile=/opt/libmyown/app/.env
 ExecStart=/opt/libmyown/venv/bin/python -m libmyown.main
 Restart=on-failure
 RestartSec=5
-LimitNOFILE=8192
 
-# Hardening (compatible with /opt layout)
+# --- Hardening -------------------------------------------------------------
+# Check with: systemd-analyze security libmyown
+#
+# What the service actually needs, and nothing else:
+#   - listen on 127.0.0.1:8000 (an unprivileged port, so no capabilities;
+#     Caddy owns 80/443)
+#   - write to the data directory (stories.git, site.json, secrets.json,
+#     PDF cache)
+#   - run child processes: git (gc), nice/ionice, pandoc, typst, and python
+#     for PDF builds
+
+# No capabilities, no privilege gain, not even through setuid binaries.
+CapabilityBoundingSet=
+AmbientCapabilities=
 NoNewPrivileges=true
-PrivateTmp=true
+RestrictSUIDSGID=true
+
+# Read-only filesystem except the data directory.
 ProtectSystem=strict
-ProtectHome=true
 ReadWritePaths=/opt/libmyown/data
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+
+# Network: TCP to serve HTTP; AF_UNIX for logging and user lookups (git).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Only the local reverse proxy can connect. If Caddy runs on another machine,
+# add its address here and to TRUSTED_PROXIES in .env.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+# Kernel, devices, and other processes are off limits.
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RemoveIPC=true
+
+# Ordinary service syscalls only. @system-service includes setpriority and
+# ioprio_set, which nice/ionice use to run git gc at low priority.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+
+# Not set: MemoryDenyWriteExecute. Some PDF toolchains (pandoc's runtime, or
+# custom builders using ctypes/cffi) may need writable+executable memory.
+# Add it if your builders work with it.
 
 [Install]
 WantedBy=multi-user.target

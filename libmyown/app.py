@@ -103,6 +103,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette):
+        store.repair_head()
         snapshots.load_or_build()
         worker.start()
         try:

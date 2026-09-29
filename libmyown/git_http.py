@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 from typing import Callable
 
 from dulwich.repo import Repo
@@ -18,6 +19,8 @@ from dulwich.web import make_wsgi_chain
 from libmyown.git_store import GitStore
 
 GIT_MOUNT_PATH = "/git/stories.git"
+
+logger = logging.getLogger("libmyown.auth")
 
 
 class _RequestBackend(Backend):
@@ -103,6 +106,12 @@ class AuthenticatedGitApp:
     def __call__(self, environ, start_response):
         credentials = parse_basic_auth(environ)
         if credentials is None or not self._check_credentials(*credentials):
+            # Git clients first try with no credentials, then with the URL's username and
+            # an empty password, before asking the credential helper. Only log real guesses.
+            if credentials is not None and credentials[1]:
+                logger.warning(
+                    "authentication failure: git from %s", environ.get("REMOTE_ADDR", "unknown")
+                )
             return _unauthorized(start_response)
 
         is_receive = (

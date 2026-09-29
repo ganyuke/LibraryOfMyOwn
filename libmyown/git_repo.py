@@ -38,21 +38,25 @@ class WorkFile:
 
 
 def resolve_head(repo: Repo, branch: str | None) -> str | None:
-    """Tip of the configured branch, falling back to HEAD when it does not exist yet."""
+    """Tip of the published branch: the configured one, or HEAD when none is configured.
+
+    A configured branch that does not exist resolves to nothing. Falling back to
+    HEAD could publish a drafts branch just because the public one was renamed
+    or not pushed yet.
+    """
     if branch:
         try:
             return repo.refs[f"refs/heads/{branch}".encode()].decode("ascii")
         except KeyError:
-            pass
+            return None
     try:
         return repo.head().decode("ascii")
     except Exception:
         return None
 
 
-def head_branch_name(repo: Repo, branch: str | None) -> str | None:
-    if branch and f"refs/heads/{branch}".encode() in repo.refs:
-        return branch
+def default_branch(repo: Repo) -> str | None:
+    """The branch HEAD points to (what `git clone` checks out), if it exists."""
     try:
         ref = repo.refs.follow(b"HEAD")
     except Exception:
@@ -61,7 +65,7 @@ def head_branch_name(repo: Repo, branch: str | None) -> str | None:
         ref = ref[0]
     if isinstance(ref, list):
         ref = ref[-1] if ref else None
-    if isinstance(ref, bytes) and ref.startswith(b"refs/heads/"):
+    if isinstance(ref, bytes) and ref.startswith(b"refs/heads/") and ref in repo.refs:
         return ref.removeprefix(b"refs/heads/").decode("ascii")
     return None
 

@@ -142,9 +142,57 @@ class GitStore:
         with self.read() as repo:
             return git_repo.resolve_head(repo, self._branch)
 
-    def head_branch_name(self) -> str | None:
+    def default_branch(self) -> str | None:
         with self.read() as repo:
-            return git_repo.head_branch_name(repo, self._branch)
+            return git_repo.default_branch(repo)
+
+    def branch_exists(self, branch: str) -> bool:
+        with self.read() as repo:
+            return f"refs/heads/{branch}".encode() in repo.refs
+
+    def set_default_branch(self, branch: str) -> bool:
+        """Point HEAD at an existing branch so clones check out what the site shows."""
+        with self._lock:
+            repo = Repo(str(self.repo_path))
+            try:
+                ref = f"refs/heads/{branch}".encode()
+                if ref not in repo.refs:
+                    return False
+                if repo.refs.read_ref(b"HEAD") != b"ref: " + ref:
+                    repo.refs.set_symbolic_ref(b"HEAD", ref)
+            finally:
+                repo.close()
+            self.refresh()
+        return True
+
+    def repair_head(self) -> str | None:
+        """Point a dangling HEAD at a real branch, like GitHub does for a new repo.
+
+        `git init --bare` points HEAD at `master`; if the first push is `main`,
+        HEAD names a branch that does not exist and, with no stories branch
+        configured, the site would show nothing. Returns the branch HEAD now
+        points to, or None when nothing needed changing.
+        """
+        with self._lock:
+            repo = Repo(str(self.repo_path))
+            try:
+                target = repo.refs.read_ref(b"HEAD") or b""
+                if not target.startswith(b"ref: "):
+                    return None
+                if target[5:].strip() in repo.refs:
+                    return None
+                branches = git_repo.list_branch_names(repo)
+                if not branches:
+                    return None
+                chosen = next(
+                    (name for name in ("main", "master") if name in branches), branches[0]
+                )
+                repo.refs.set_symbolic_ref(b"HEAD", f"refs/heads/{chosen}".encode())
+            finally:
+                repo.close()
+            self.refresh()
+        logger.info("HEAD pointed at a missing branch; now points at %s", chosen)
+        return chosen
 
     def list_branch_names(self) -> list[str]:
         with self.read() as repo:

@@ -22,5 +22,6 @@ The provided Caddyfile ratelimits the following zones:
 |------|------|-------|
 | `login_per_ip` | `/login` | 10 requests / minute / client IP |
 | `git_per_ip` | `/git/*` | 30 requests / minute / client IP |
+| `pdf_per_ip` | `/works/*/pdf/*` | 10 requests / minute / client IP |
 
 Adjust `events` and `window` for your traffic.

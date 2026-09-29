@@ -108,6 +108,7 @@ class PostReceiveWorker:
 
     def run_once(self, *, full: bool = False) -> None:
         self._store.refresh()
+        self._store.repair_head()
         self._store.set_branch(self._resolve_branch())
         self._snapshots.rebuild(full=full)
         if self._store.needs_gc():

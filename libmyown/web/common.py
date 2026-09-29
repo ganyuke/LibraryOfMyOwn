@@ -25,12 +25,26 @@ from libmyown.theme import get_theme
 from libmyown.web.state import get_state
 
 MAX_FORM_FIELDS = 5000
+FLASH_KEY = "flash"
+
+
+def flash(request: Request, text: str, *, error: bool = False) -> None:
+    """One-time notice for the page after a POST-redirect-GET; shown once, then dropped.
+
+    Stored in the signed session cookie, so a crafted link cannot put text on an admin page.
+    """
+    request.session[FLASH_KEY] = {"error" if error else "message": text}
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
     state = get_state(request)
     site = state.site()
+    admin = is_admin(request)
+    flashed = request.session.pop(FLASH_KEY, None)
+    notices = flashed if isinstance(flashed, dict) else {}
     ctx = {
+        "message": str(notices.get("message", "")),
+        "error": str(notices.get("error", "")),
         "origin": request_origin(request, site),
         "site_title": site.site_title,
         "home_label": HOME_LABEL,
@@ -38,9 +52,10 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
         "app_label": APP_LABEL,
         "show_login_link": site.show_login_link,
         "robots_noindex": site.robots_noindex,
-        "is_admin": is_admin(request),
+        "is_admin": admin,
         "theme": get_theme(request),
         "flags": site.flags,
+        "missing_branch": state.missing_branch() if admin else None,
         **context,
         "csrf_token": get_csrf_token(request),
     }

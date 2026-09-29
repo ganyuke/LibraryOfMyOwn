@@ -168,20 +168,54 @@ class WorkerScheduleTests(unittest.TestCase):
         self.assertFalse(self.record.exists())
 
 
+@unittest.skipUnless(has_git(), "git binary required")
+class DanglingHeadTests(unittest.TestCase):
+    def test_first_push_of_main_into_master_repo_is_served(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            bare = data_dir / "stories.git"
+            git(root, "init", "-q", "--bare", "--initial-branch=master", str(bare))
+            work = root / "work"
+            work.mkdir()
+            git(work, "init", "-q", "-b", "main")
+            (work / "S").mkdir()
+            (work / "S" / "a.md").write_text("---\ntitle: A\n---\ntext\n")
+            git(work, "add", ".")
+            git(work, "commit", "-qm", "first")
+            git(work, "push", "-q", str(bare), "main")
+
+            store = GitStore(bare)
+            self.addCleanup(store.close)
+            self.assertIsNone(store.head_sha())
+            holder = SnapshotHolder(store, data_dir / "work-index.json")
+            PostReceiveWorker(store, holder).run_once()
+            self.assertEqual((bare / "HEAD").read_text().strip(), "ref: refs/heads/main")
+            self.assertEqual(holder.current.paths, ["S/a.md"])
+            self.assertIsNone(store.repair_head())
+
+    def test_valid_head_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = GitStore(make_data_dir(tmp) / "stories.git")
+            self.addCleanup(store.close)
+            self.assertIsNone(store.repair_head())
+
+
 class MaintenancePageTests(unittest.TestCase):
     def test_manual_gc_from_admin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             client = make_client(make_data_dir(tmp))
             login(client)
             page = client.get("/admin/maintenance")
-            self.assertIn("No gc has run yet", page.text)
+            self.assertIn("Not tidied up yet", page.text)
             response = client.post(
                 "/admin/maintenance",
                 data={"csrf_token": csrf_from(page.text), "action": "run_git_gc"},
                 follow_redirects=True,
             )
             self.assertEqual(response.status_code, 200)
-            self.assertIn("Last gc:", response.text)
+            self.assertIn("Last tidied up", response.text)
             self.assertIn("1 pack", response.text)
 
 

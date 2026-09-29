@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install LibraryOfMyOwn under /opt/libmyown on Linux (auto-detects CPU arch).
-# Bundles typst and pandoc; pdf-scripts ship with the repo.
+# Bundles uv, typst and pandoc; uv installs Python and the pinned dependencies
+# from uv.lock. pdf-scripts ship with the repo.
 #
 # Usage (from an existing clone):
 #   sudo ./scripts/deploy-pi.sh
@@ -15,8 +16,10 @@
 #   LIBMYOWN_USER=libmyown                              system user (created if missing)
 #   TYPST_VERSION=0.15.1                                typst release (default)
 #   PANDOC_VERSION=3.11                                 pandoc release (default)
+#   UV_VERSION=0.12.20                                  uv release (default)
 #   TYPST_URL=...                                       override typst download URL
 #   PANDOC_URL=...                                      override pandoc download URL
+#   UV_URL=...                                          override uv download URL
 
 set -euo pipefail
 
@@ -26,12 +29,15 @@ GIT_REF="${GIT_REF:-main}"
 DEFAULT_REPO_URL="https://github.com/ganyuke/LibraryOfMyOwn.git"
 TYPST_VERSION="${TYPST_VERSION:-0.15.1}"
 PANDOC_VERSION="${PANDOC_VERSION:-3.11}"
+UV_VERSION="${UV_VERSION:-0.12.20}"
 
 APP_DIR="$INSTALL_ROOT/app"
 VENV_DIR="$INSTALL_ROOT/venv"
 BIN_DIR="$INSTALL_ROOT/bin"
 DATA_DIR="$INSTALL_ROOT/data"
 PDF_SCRIPTS_DIR="$INSTALL_ROOT/pdf-scripts"
+PYTHON_DIR="$INSTALL_ROOT/python"
+UV_CACHE="$INSTALL_ROOT/cache/uv"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "Run as root: sudo $0" >&2
@@ -74,6 +80,22 @@ default_pandoc_url() {
     "$PANDOC_VERSION" "$PANDOC_VERSION" "$arch"
 }
 
+default_uv_url() {
+  local target
+  case "$(uname -m)" in
+    x86_64) target="x86_64-unknown-linux-gnu" ;;
+    aarch64 | arm64) target="aarch64-unknown-linux-gnu" ;;
+    armv7l) target="armv7-unknown-linux-gnueabihf" ;;
+    armv6l) target="arm-unknown-linux-musleabihf" ;;
+    riscv64) target="riscv64gc-unknown-linux-gnu" ;;
+    *)
+      echo "Unsupported architecture for uv: $(uname -m) (set UV_URL manually)" >&2
+      return 1
+      ;;
+  esac
+  printf 'https://github.com/astral-sh/uv/releases/download/%s/uv-%s.tar.gz\n' "$UV_VERSION" "$target"
+}
+
 default_repo_url() {
   local script_path="${BASH_SOURCE[0]:-$0}"
   if [[ -f "$script_path" ]]; then
@@ -90,7 +112,7 @@ REPO_URL="${REPO_URL:-$(default_repo_url)}"
 
 need_cmd curl
 need_cmd tar
-need_cmd python3
+need_cmd xz
 need_cmd install
 need_cmd git
 need_cmd rsync
@@ -99,23 +121,10 @@ git_app() {
   git -c "safe.directory=$APP_DIR" -C "$APP_DIR" "$@"
 }
 
-python_version() {
-  python3 - <<'PY'
-import sys
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-PY
-}
-
-PY_VER="$(python_version)"
-PY_MAJOR="${PY_VER%%.*}"
-PY_MINOR="${PY_VER#*.}"
-if [[ "$PY_MAJOR" -lt 3 ]] || [[ "$PY_MAJOR" -eq 3 && "$PY_MINOR" -lt 12 ]]; then
-  echo "Warning: Python $PY_VER found; this project targets 3.14+. Install a newer python3 if the app fails." >&2
-fi
-
 MACHINE="$(uname -m)"
 TYPST_URL="${TYPST_URL:-$(default_typst_url)}"
 PANDOC_URL="${PANDOC_URL:-$(default_pandoc_url)}"
+UV_URL="${UV_URL:-$(default_uv_url)}"
 
 echo "==> Creating layout under $INSTALL_ROOT (arch: $MACHINE)"
 install -d -m 755 "$INSTALL_ROOT" "$BIN_DIR" "$DATA_DIR" "$PDF_SCRIPTS_DIR"
@@ -145,6 +154,16 @@ if [[ -z "$pandoc_bin" ]]; then
 fi
 install -m 755 "$pandoc_bin" "$BIN_DIR/pandoc"
 
+echo "==> Installing uv ($UV_URL)"
+rm -rf "$tmpdir"/*
+curl -fsSL "$UV_URL" | tar -xz -C "$tmpdir"
+uv_bin="$(find "$tmpdir" -name uv -type f | head -n 1)"
+if [[ -z "$uv_bin" ]]; then
+  echo "Could not find uv binary in $UV_URL" >&2
+  exit 1
+fi
+install -m 755 "$uv_bin" "$BIN_DIR/uv"
+
 echo "==> Application source ($REPO_URL @ $GIT_REF)"
 if [[ -d "$APP_DIR/.git" ]]; then
   chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
@@ -160,18 +179,20 @@ else
   chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$APP_DIR"
 fi
 
-if [[ ! -f "$APP_DIR/requirements.txt" ]]; then
-  echo "Checkout at $APP_DIR is missing requirements.txt." >&2
+if [[ ! -f "$APP_DIR/uv.lock" ]]; then
+  echo "Checkout at $APP_DIR is missing uv.lock." >&2
   exit 1
 fi
 
-echo "==> Python virtualenv"
-if [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  python3 -m venv "$VENV_DIR"
-fi
-"$VENV_DIR/bin/pip" install --upgrade pip
-"$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
-"$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements-pdf-print.txt"
+echo "==> Installing Python and dependencies"
+# Python version comes from .python-version; uv downloads it into $PYTHON_DIR
+# (falling back to the system python3 where no managed build exists).
+(cd "$APP_DIR" && \
+  UV_PROJECT_ENVIRONMENT="$VENV_DIR" \
+  UV_PYTHON_INSTALL_DIR="$PYTHON_DIR" \
+  UV_PYTHON_PREFERENCE=managed \
+  UV_CACHE_DIR="$UV_CACHE" \
+  "$BIN_DIR/uv" sync --locked --no-dev --extra pdf)
 
 if [[ -d "$APP_DIR/pdf-scripts" ]]; then
   echo "==> Copying pdf-scripts"
@@ -183,7 +204,7 @@ fi
 echo "==> Data directory"
 install -d -m 755 "$DATA_DIR/pdf-cache"
 if [[ ! -d "$DATA_DIR/stories.git" ]]; then
-  git init --bare "$DATA_DIR/stories.git"
+  git init --quiet --bare --initial-branch=main "$DATA_DIR/stories.git"
 fi
 if [[ ! -f "$DATA_DIR/site.json" ]]; then
   if [[ -f "$APP_DIR/data/site.json.example" ]]; then
@@ -219,14 +240,16 @@ echo
 echo "Deploy complete."
 echo "  App:         $APP_DIR ($GIT_REF)"
 echo "  Data:        $DATA_DIR"
-echo "  Tools:       $BIN_DIR/typst $BIN_DIR/pandoc"
+echo "  Tools:       $BIN_DIR/uv $BIN_DIR/typst $BIN_DIR/pandoc"
 echo "  Environment: $APP_DIR/.env"
 echo
 "$BIN_DIR/typst" --version
 "$BIN_DIR/pandoc" --version | head -n 1
+"$BIN_DIR/uv" --version
+"$VENV_DIR/bin/python" --version
 echo
 echo "Next steps:"
-echo "  1. Edit $APP_DIR/.env if needed (set PUBLIC_URL; secrets auto-generate on first start)"
+echo "  1. Edit $APP_DIR/.env if needed (set PUBLIC_URL, secrets are generated on first start)"
 echo "  2. sudo systemctl restart libmyown"
 echo "  3. On first start the admin password is printed once to the log:"
 echo "       sudo journalctl -u libmyown | grep 'Generated admin password'"

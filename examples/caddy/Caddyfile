@@ -8,6 +8,7 @@
 your.domain {
 	@login path /login
 	@git path /git/*
+	@pdf path_regexp ^/works/.+/pdf/[^/]+$
 
 	handle @login {
 		rate_limit {
@@ -25,6 +26,18 @@ your.domain {
 			zone git_per_ip {
 				key {remote_host}
 				events 30
+				window 1m
+			}
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# PDF builds are expensive; finished PDFs are cached, so readers rarely hit this.
+	handle @pdf {
+		rate_limit {
+			zone pdf_per_ip {
+				key {remote_host}
+				events 10
 				window 1m
 			}
 		}

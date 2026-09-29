@@ -59,6 +59,13 @@ class AppState:
                 self.worker.request()
         return self.snapshots.current
 
+    def missing_branch(self) -> str | None:
+        """The configured published branch, when it does not exist (the site is then empty)."""
+        branch = effective_branch(self.site())
+        if branch and not self.store.branch_exists(branch):
+            return branch
+        return None
+
     def service(self, site: SiteConfig | None = None) -> LibraryService:
         return LibraryService(self.snapshot(), site or self.site())
 

@@ -16,7 +16,7 @@ from libmyown.authorship import (
     list_work_exceptions,
 )
 from libmyown.cache_tools import clear_pdf_cache, clear_runtime_caches, format_bytes, pdf_cache_stats
-from libmyown.content import parse_field_name_list
+from libmyown.content import format_datetime, parse_field_name_list
 from libmyown.continuity import continuity_selection, continuity_story_options
 from libmyown.git_repo import path_to_slug
 from libmyown.request_url import normalize_public_url, request_origin
@@ -38,8 +38,8 @@ from libmyown.site_config import (
     normalize_flag_color,
     normalize_flag_id,
 )
-from libmyown.web.common import admin_page, form_post, redirect, render
-from libmyown.web.state import AppState, get_state
+from libmyown.web.common import admin_page, flash, form_post, redirect, render
+from libmyown.web.state import AppState, effective_branch, get_state
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -207,7 +207,6 @@ def admin_flags_get(request: Request) -> Response:
             "flags": site.flags,
             "work_flags": site.work_flags,
             "selected_flag": selected_flag,
-            "error": request.query_params.get("error", ""),
         },
     )
 
@@ -220,7 +219,8 @@ def admin_flags_post(request: Request, form: FormData) -> Response:
     if action == "add_flag":
         flag_id = normalize_flag_id(str(form.get("new_flag_id", "")))
         if not flag_id:
-            return redirect("/admin/flags", error="invalid-id")
+            flash(request, "Invalid flag id.", error=True)
+            return redirect("/admin/flags")
         label = str(form.get("new_flag_label", "")).strip() or flag_id.replace("-", " ").title()
         color = normalize_flag_color(str(form.get("new_flag_color", "")))
         try:
@@ -229,7 +229,8 @@ def admin_flags_post(request: Request, form: FormData) -> Response:
                     raise AbortEdit()
                 site.flags[flag_id] = FlagDef(label=label, color=color)
         except AbortEdit:
-            return redirect("/admin/flags", error="exists")
+            flash(request, "Flag already exists.", error=True)
+            return redirect("/admin/flags")
         return redirect("/admin/flags", flag=flag_id)
 
     if action == "remove_flag":
@@ -491,6 +492,18 @@ def admin_authorship_post(request: Request, form: FormData) -> Response:
 def admin_site_get(request: Request) -> Response:
     state = get_state(request)
     site = state.site()
+    branches = state.store.list_branch_names()
+    missing = state.missing_branch()
+    selected = effective_branch(site) or state.store.default_branch() or ""
+    serving = None
+    snapshot = state.snapshot()
+    if snapshot.head_sha and not missing:
+        committed_at = state.store.commit_date(snapshot.head_sha)
+        serving = {
+            "branch": selected,
+            "short_sha": snapshot.head_sha[:7],
+            "date": format_datetime(committed_at) if committed_at else "",
+        }
     return render(
         request,
         "admin/site.html",
@@ -498,7 +511,9 @@ def admin_site_get(request: Request) -> Response:
             "site": site,
             "git_username": state.secrets.git_username,
             "git_remote_url": _git_remote_url(state, site, request),
-            "active_branch": state.store.head_branch_name(),
+            "branches": branches,
+            "selected_branch": selected,
+            "serving": serving,
         },
     )
 
@@ -507,36 +522,36 @@ def admin_site_get(request: Request) -> Response:
 def admin_site_post(request: Request, form: FormData) -> Response:
     state = get_state(request)
     git_username = str(form.get("git_username", "")).strip() or "git"
+    branch = str(form.get("stories_branch", "")).strip()
+    current = effective_branch(state.site()) or ""
+    # Only existing branches can be chosen; an unchanged (possibly missing) value is kept as is.
+    if branch != current and not state.store.set_default_branch(branch):
+        flash(request, f"Branch {branch!r} does not exist.", error=True)
+        return redirect("/admin/site")
     with state.config.edit() as site:
         site.public_url = normalize_public_url(str(form.get("public_url", "")))
         site.site_title = str(form.get("site_title", "")).strip() or DEFAULT_SITE_TITLE
-        site.stories_branch = str(form.get("stories_branch", "")).strip()
+        site.stories_branch = branch
         site.show_login_link = "show_login_link" in form
         site.expose_unpublished_continuity_titles = "expose_unpublished_continuity_titles" in form
         site.public_history = "public_history" in form
         site.robots_noindex = "robots_noindex" in form
         site.git_username = git_username
-        new_branch = site.stories_branch.strip() or None
     if state.secrets.git_username != git_username:
         state.secrets.git_username = git_username
         save_secrets(state.settings.secrets_path, state.secrets)
-    if new_branch != state.store.branch:
+    if (branch or None) != state.store.branch:
         state.worker.request()
-    return RedirectResponse("/admin/site", status_code=303)
+    flash(request, "Settings saved.")
+    return redirect("/admin/site")
 
 
 # -- security ----------------------------------------------------------------------------------------
 
 
-def _security_page(request: Request, **context: str) -> Response:
+def _security_page(request: Request, *, revealed_git_password: str = "") -> Response:
     return render(
-        request,
-        "admin/security.html",
-        {
-            "revealed_git_password": context.get("revealed_git_password", ""),
-            "message": context.get("message", request.query_params.get("message", "")),
-            "error": context.get("error", request.query_params.get("error", "")),
-        },
+        request, "admin/security.html", {"revealed_git_password": revealed_git_password}
     )
 
 
@@ -567,16 +582,19 @@ def admin_security_post(request: Request, form: FormData) -> Response:
         confirm = str(form.get("new_password_confirm", ""))
         stored = state.secrets.admin_password_hash
         if not stored or not verify_password(current, stored):
-            return redirect("/admin/security", error="Current password is incorrect.")
-        if len(new_password) < MIN_PASSWORD_LENGTH:
-            return redirect(
-                "/admin/security",
-                error=f"New password must be at least {MIN_PASSWORD_LENGTH} characters.",
+            flash(request, "Current password is incorrect.", error=True)
+        elif len(new_password) < MIN_PASSWORD_LENGTH:
+            flash(
+                request,
+                f"New password must be at least {MIN_PASSWORD_LENGTH} characters.",
+                error=True,
             )
-        if new_password != confirm:
-            return redirect("/admin/security", error="New passwords do not match.")
-        set_admin_password(secrets_path, state.secrets, new_password)
-        return redirect("/admin/security", message="Admin password updated.")
+        elif new_password != confirm:
+            flash(request, "New passwords do not match.", error=True)
+        else:
+            set_admin_password(secrets_path, state.secrets, new_password)
+            flash(request, "Admin password updated.")
+        return redirect("/admin/security")
 
     return RedirectResponse("/admin/security", status_code=303)
 
@@ -613,7 +631,6 @@ def admin_maintenance_get(request: Request) -> Response:
             "repo_loose": repo_stats.loose_objects,
             "repo_size": format_bytes(repo_stats.bytes),
             "last_gc": _last_gc_summary(state.worker.last_gc()),
-            "message": request.query_params.get("message", ""),
         },
     )
 
@@ -630,10 +647,11 @@ def admin_maintenance_post(request: Request, form: FormData) -> Response:
         text = "Runtime caches cleared."
     elif action == "run_git_gc":
         state.worker.request_gc()
-        text = "Git gc started in the background. Reload this page to see the result."
+        text = "Collecting all your garbage in the background. Reload in a moment to see the result."
     else:
         return RedirectResponse("/admin/maintenance", status_code=303)
-    return redirect("/admin/maintenance", message=text)
+    flash(request, text)
+    return redirect("/admin/maintenance")
 
 
 routes = [

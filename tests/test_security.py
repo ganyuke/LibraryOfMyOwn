@@ -114,6 +114,38 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.client.get("/admin", follow_redirects=False).status_code, 303)
 
+    def test_notices_come_from_session_not_url(self) -> None:
+        login(self.client)
+        spoofed = self.client.get("/admin/security?error=Your+account+is+locked&message=Call+us")
+        self.assertNotIn("Your account is locked", spoofed.text)
+        self.assertNotIn("Call us", spoofed.text)
+        page = self.client.get("/admin/security")
+        response = self.client.post(
+            "/admin/security",
+            data={
+                "csrf_token": csrf_from(page.text),
+                "action": "change_admin_password",
+                "current_password": "wrong",
+                "new_password": "long-enough-1",
+                "new_password_confirm": "long-enough-1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.headers["location"], "/admin/security")
+        shown = self.client.get("/admin/security")
+        self.assertIn("Current password is incorrect.", shown.text)
+        self.assertNotIn("Current password is incorrect.", self.client.get("/admin/security").text)
+
+    def test_failed_logins_are_logged(self) -> None:
+        csrf = csrf_from(self.client.get("/login").text)
+        with self.assertLogs("libmyown.auth", level="WARNING") as logs:
+            self.client.post("/login", data={"csrf_token": csrf, "password": "nope"})
+            self.client.get("/git/stories.git/HEAD", auth=("git", "nope"))
+            # git's own empty-password probe before asking the credential helper
+            self.client.get("/git/stories.git/HEAD", auth=("git", ""))
+        self.assertEqual(len(logs.records), 2)
+        self.assertTrue(all("authentication failure" in r.getMessage() for r in logs.records))
+
     def test_csrf_required(self) -> None:
         response = self.client.post("/theme", data={"theme": "dark", "next": "/"})
         self.assertEqual(response.status_code, 403)

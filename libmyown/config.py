@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from libmyown.secrets import Secrets, ensure_secrets, generate_git_password, set_admin_password
-from libmyown.site_config import seed_public_url, seed_stories_branch
+from libmyown.site_config import seed_public_url
 
 # Load .env from the project root (parent of libmyown/).
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -141,10 +141,6 @@ def load_settings() -> Settings:
     seed_public_url(
         site_config_path,
         env_public_url=os.environ.get("PUBLIC_URL", "").strip(),
-    )
-    seed_stories_branch(
-        site_config_path,
-        env_stories_branch=os.environ.get("STORIES_BRANCH", "").strip(),
     )
 
     return Settings(

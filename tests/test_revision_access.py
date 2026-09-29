@@ -26,8 +26,9 @@ def build(input_md, output_pdf, work_dir, **kwargs):
 '''
 
 
-@unittest.skipUnless(has_git(), "git binary required")
-class RevisionAccessTests(unittest.TestCase):
+class _TwoBranchRepo(unittest.TestCase):
+    """`published` holds the public text; `main` has a newer, secret draft."""
+
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -69,6 +70,10 @@ class RevisionAccessTests(unittest.TestCase):
         self.assertNotIn(b"SECRET", response.content, url)
         self.assertEqual(response.status_code, 404, url)
 
+
+
+@unittest.skipUnless(has_git(), "git binary required")
+class RevisionAccessTests(_TwoBranchRepo):
     def test_latest_view_uses_configured_branch(self) -> None:
         response = self.client.get("/works/s/story")
         self.assertEqual(response.status_code, 200)
@@ -140,3 +145,48 @@ class MergeCommitHistoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(has_git(), "git binary required")
+class PublishedBranchSettingTests(_TwoBranchRepo):
+    """Admin -> Site settings: pick the published branch from the branches that exist."""
+
+    def _site_form(self) -> dict:
+        page = self.client.get("/admin/site").text
+        return {"csrf_token": csrf_from(page), "site_title": "T", "git_username": "git"}
+
+    def test_dropdown_lists_branches_and_what_is_served(self) -> None:
+        login(self.client)
+        page = self.client.get("/admin/site").text
+        self.assertIn('<option value="main">main</option>', page)
+        self.assertIn('<option value="published" selected>published</option>', page)
+        self.assertIn(f"Serving <strong>published</strong> at <code>{self.second[:7]}</code>", page)
+
+    def test_choosing_a_branch_publishes_it_and_moves_head(self) -> None:
+        login(self.client)
+        form = self._site_form() | {"stories_branch": "main"}
+        response = self.client.post("/admin/site", data=form, follow_redirects=True)
+        self.assertIn("Settings saved.", response.text)
+        self.assertEqual(json.loads(self.site_path.read_text())["stories_branch"], "main")
+        head = (self.data_dir / "stories.git" / "HEAD").read_text().strip()
+        self.assertEqual(head, "ref: refs/heads/main")
+        self.assertIn("SECRET DRAFT", self.client.get("/works/s/story").text)
+
+    def test_unknown_branch_is_rejected(self) -> None:
+        login(self.client)
+        form = self._site_form() | {"stories_branch": "nope"}
+        response = self.client.post("/admin/site", data=form, follow_redirects=True)
+        self.assertIn("does not exist", response.text)
+        self.assertEqual(json.loads(self.site_path.read_text())["stories_branch"], "published")
+
+    def test_missing_branch_shows_nothing_and_warns_admin(self) -> None:
+        save_site_config(
+            self.site_path, SiteConfig(stories_branch="gone", published_directories={"S"})
+        )
+        self.assertNoLeak("/works/s/story")
+        self.assertNotIn(b"Story", self.client.get("/").content)
+        self.assertNotIn(b"doesn't exist", self.client.get("/").content)
+        login(self.client)
+        admin = self.client.get("/admin").text
+        self.assertIn("<strong>gone</strong> doesn't exist", admin)
+        self.assertIn('<option value="gone" selected>gone (missing)</option>', self.client.get("/admin/site").text)

@@ -10,8 +10,7 @@
 {% block content %}
 <div class="admin-page">
 <h1>Work flags</h1>
-{% if error == "invalid-id" %}<p class="error">Invalid flag id.</p>{% endif %}
-{% if error == "exists" %}<p class="error">Flag already exists.</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
 
 <form method="post" class="admin-form-anchor" id="flags-form">
   {{ csrf_field(csrf_token) }}

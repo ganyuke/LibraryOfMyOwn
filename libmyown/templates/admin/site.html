@@ -10,6 +10,8 @@
 {% block content %}
 <div class="admin-page">
 <h1>Site settings</h1>
+{% if message %}<p class="notice">{{ message }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
 <form method="post" class="admin-form">
   {{ csrf_field(csrf_token) }}
   <fieldset class="admin-panel">
@@ -38,11 +40,23 @@
     </div>
   </fieldset>
   <fieldset class="admin-panel">
-    <legend>Stories branch</legend>
+    <legend>Published branch</legend>
+    {% if branches %}
     <label>
-      <span class="visually-hidden">Stories branch</span>
-      <input type="text" name="stories_branch" value="{{ site.stories_branch }}" placeholder="{{ active_branch or 'HEAD' }}">
+      <span class="visually-hidden">Published branch</span>
+      <select name="stories_branch">
+        {% if missing_branch %}<option value="{{ missing_branch }}" selected>{{ missing_branch }} (missing)</option>{% endif %}
+        {% for branch in branches %}
+        <option value="{{ branch }}"{% if branch == selected_branch %} selected{% endif %}>{{ branch }}</option>
+        {% endfor %}
+      </select>
     </label>
+    <p>Only this branch is ever shown on the site. It is also the branch a <code>git clone</code> checks out.</p>
+    {% if serving %}<p>Serving <strong>{{ serving.branch }}</strong> at <code>{{ serving.short_sha }}</code> ({{ serving.date }}).</p>{% endif %}
+    {% else %}
+    <input type="hidden" name="stories_branch" value="{{ site.stories_branch }}">
+    <p>Nothing has been pushed yet. Push a branch and it will show up here.</p>
+    {% endif %}
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Privacy</legend>

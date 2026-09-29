@@ -1,0 +1,39 @@
+[project]
+name = "libmyown"
+version = "0.1.0"
+description = "Self-hosted, git-backed reading site for Markdown creative writing"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "a2wsgi>=1.10.0",
+    "dulwich>=0.22.0",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.0",
+    "markdown>=3.7",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.20",
+    "pyyaml>=6.0.0",
+    "starlette>=0.46.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[project.optional-dependencies]
+# Print imposition for the bundled cutstack/onecut PDF builders.
+pdf = [
+    "pdfimpose>=2.7.0",
+    "pypdf>=5.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2",
+    "pytest>=8",
+]
+
+[tool.uv]
+# An app run from its checkout, not an installable package.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

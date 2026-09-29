@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from starlette.datastructures import FormData
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
@@ -11,6 +13,8 @@ from libmyown.theme import set_theme_response
 from libmyown.web.common import form_post, render
 from libmyown.web.state import get_state
 
+logger = logging.getLogger("libmyown.auth")
+
 
 def login_get(request: Request) -> Response:
     if is_admin(request):
@@ -21,8 +25,11 @@ def login_get(request: Request) -> Response:
 @form_post(admin=False)
 def login_post(request: Request, form: FormData) -> Response:
     password = str(form.get("password", ""))
+    client = request.client.host if request.client else "unknown"
     if login_admin(request, get_state(request).secrets, password):
+        logger.info("admin login from %s", client)
         return RedirectResponse("/admin", status_code=303)
+    logger.warning("authentication failure: admin login from %s", client)
     return render(request, "login.html", {"error": "Wrong password."}, status_code=401)
 
 

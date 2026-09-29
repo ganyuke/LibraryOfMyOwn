@@ -8,10 +8,10 @@ Update public stories over HTTP with git. Read through your revision history for
 
 ## Requirements
 
-- Python 3.14+
+- [uv](https://docs.astral.sh/uv/) (installs Python 3.13 and the dependencies for you)
 - Optional: Caddy (or another reverse proxy) for HTTPS and rate limiting
 
-If you want your friends to be able to download your stories as PDFs, you can point the `PDF_SCRIPTS` variable at a directory of Python builder modules (see below for module schema). This repository includes default download modules in `pdf-scripts/`. The Python dependencies are in `requirements-pdf-print.txt`.
+If you want your friends to be able to download your stories as PDFs, you can point the `PDF_SCRIPTS` variable at a directory of Python builder modules (see below for module schema). This repository includes default download modules in `pdf-scripts/`. Their Python dependencies are the `pdf` extra (`uv sync --extra pdf`).
 
 ## Deploy
 
@@ -56,10 +56,10 @@ If `PUBLIC_URL` is `https://` and you want to log in over plain `http://` (e.g. 
 ## Run demo
 
 ```bash
-source .venv/bin/activate
-set -a && source .env && set +a
-python -m libmyown.main
+uv run python -m libmyown.main
 ```
+
+The app reads `.env` from the project root on its own.
 
 Open http://127.0.0.1:8000 and log in at `/login` with your `ADMIN_PASSWORD`, or with the generated password printed in the terminal on first start.
 
@@ -71,7 +71,7 @@ Open http://127.0.0.1:8000 and log in at `/login` with your `ADMIN_PASSWORD`, or
 This repository includes a sample dataset that you can load with:
 
 ```bash
-python scripts/seed_sample.py
+uv run scripts/seed_sample.py
 ```
 
 The script imports the Markdown files from the variable `STORIES_SOURCE` (default: `fixtures/sample-stories`), adds a few sample commits for history/compare, and publishes the path `Series/` by default.
@@ -79,7 +79,8 @@ The script imports the Markdown files from the variable `STORIES_SOURCE` (defaul
 You can run checks with:
 
 ```bash
-python scripts/smoke_test.py
+uv run pytest
+uv run scripts/smoke_test.py
 ```
 
 ## Workflows
@@ -95,14 +96,24 @@ On your writing machine, you will want to create a git repository (if you do not
 ```bash
 cd $YOUR_WRITING_MATERIALS
 git init
-git remote add library https://git:YOUR_GIT_PASSWORD@your.domain/git/stories.git
+git remote add library https://git@your.domain/git/stories.git
 # Add your .md files, commit, then:
 git push -u library main
 ```
 
-New pushes show up on the site a few seconds later. Repository cleanup (`git gc`) runs automatically; you can also run it from **Admin → Maintenance**.
+Git asks for the password on the first push. To have it remembered in your system keyring instead of retyping it (and instead of putting it in the remote URL, where it sits in plain text in `.git/config`):
 
-Library Of My Own reads the branch tip from repo `HEAD` by default. You can use **Admin → Site settings** to change the site to a desired branch. The site will show stories EXCLUSIVELY from this configured branch. All other branches are ignored.
+```bash
+# Fedora
+sudo dnf install git-credential-libsecret
+git config --global credential.helper libsecret
+```
+
+On macOS, git uses the Keychain by default. On Windows, Git Credential Manager (bundled with Git for Windows) does the same.
+
+New pushes show up on the site a few seconds later. The repository tidies itself up automatically, or you can do it yourself from **Admin → Maintenance**.
+
+Pick the branch the site shows under **Admin → Site settings → Published branch** (by default, the branch you pushed first). The site shows stories EXCLUSIVELY from that branch, so you can keep drafts on other branches. If the published branch is ever missing, the site shows nothing until you push it or pick another.
 
 ### Publish stories
 
@@ -146,7 +157,7 @@ This project supports downloading Markdown files as PDFs. By default, this proje
 
 Digital is intended for (as its name suggests) digital consumption while the rest are optimized for printing on US Letter-sized paper. All four split the story into 4-up on US Letter.
 
-Pandoc and Typst binaries must be on `PATH` for these options to function. Additionally, you must install additional Python dependencies with `pip install -r requirements-pdf-print.txt`.
+Pandoc and Typst binaries must be on `PATH` for these options to function. The deploy script installs everything needed. For a local checkout, run `uv sync --extra pdf`.
 
 #### Custom builders
 

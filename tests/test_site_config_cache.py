@@ -14,7 +14,6 @@ from libmyown.site_config import (
     load_site_config,
     save_site_config,
     seed_public_url,
-    seed_stories_branch,
 )
 
 
@@ -47,21 +46,6 @@ class SiteConfigCacheTests(unittest.TestCase):
             seed_public_url(path, env_public_url="https://example.com")
             site = load_site_config(path)
             self.assertEqual(site.public_url, "https://existing.example")
-
-    def test_seed_stories_branch_writes_when_empty(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "site.json"
-            seed_stories_branch(path, env_stories_branch="main")
-            site = load_site_config(path)
-            self.assertEqual(site.stories_branch, "main")
-
-    def test_seed_stories_branch_ignored_when_already_set(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "site.json"
-            save_site_config(path, SiteConfig(stories_branch="dev"))
-            seed_stories_branch(path, env_stories_branch="main")
-            site = load_site_config(path)
-            self.assertEqual(site.stories_branch, "dev")
 
     def test_rewrite_reloads_site_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
