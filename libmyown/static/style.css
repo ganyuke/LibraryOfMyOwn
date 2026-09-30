@@ -26,6 +26,10 @@
   --primary-bg: #0645ad;
   --primary-bg-hover: #003d99;
   --primary-text: #fff;
+  --space-xs: 0.35rem;
+  --space-s: 0.5rem;
+  --space-m: 0.75rem;
+  --space-l: 1.25rem;
   --sans: system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
   color-scheme: light;
@@ -587,7 +591,6 @@ h1 {
 
 .authorship-default-author {
   display: block;
-  margin-top: 0.75rem;
 }
 
 .authorship-default-author input {
@@ -949,7 +952,7 @@ fieldset.work-panel {
 }
 
 .admin-form {
-  gap: 1.25rem;
+  gap: var(--space-l);
 }
 
 .simple-form label,
@@ -963,7 +966,7 @@ fieldset.work-panel {
 }
 
 .admin-form label {
-  gap: 0.35rem;
+  gap: var(--space-xs);
 }
 
 .checkbox-row {
@@ -1084,7 +1087,7 @@ fieldset.work-panel {
 .admin-page {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--space-l);
   max-width: 36rem;
   /* One font for the whole admin area. Only the page title keeps the site's serif. */
   font-family: var(--sans);
@@ -1159,11 +1162,19 @@ html.client-js .admin-show-btn {
   display: none;
 }
 
+/* Admin spacing: panels sit --space-l apart, things inside a panel --space-m apart,
+   a label --space-xs above its control, and items in a row --space-s apart.
+   Children never add their own outer margins, so the gaps stay the same everywhere. */
 .admin-panel {
   margin: 0;
   background: var(--surface);
   display: flex;
   flex-direction: column;
+  gap: var(--space-m);
+}
+
+.admin-panel > * {
+  margin: 0;
 }
 
 fieldset.admin-panel {
@@ -1221,7 +1232,7 @@ fieldset.admin-panel {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-s) var(--space-m);
 }
 
 .admin-list-item-body {
@@ -1236,12 +1247,12 @@ fieldset.admin-panel {
 
 .admin-panels-grid {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-l);
 }
 
 .admin-choice-list {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   max-height: 24rem;
   overflow: auto;
   padding-right: 0.25rem;
@@ -1267,7 +1278,7 @@ fieldset.admin-panel {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-s);
 }
 
 .admin-nav {
@@ -1276,11 +1287,11 @@ fieldset.admin-panel {
   padding: 0;
 }
 
-.admin-nav li { margin: 0.5rem 0; }
+.admin-nav li { margin: var(--space-s) 0; }
 
 .git-remote-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-s);
   align-items: stretch;
 }
 

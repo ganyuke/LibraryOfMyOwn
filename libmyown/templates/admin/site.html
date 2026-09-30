@@ -51,8 +51,7 @@
         {% endfor %}
       </select>
     </label>
-    <p>Only this branch is ever shown on the site. It is also the branch a <code>git clone</code> checks out.</p>
-    {% if serving %}<p>Serving <strong>{{ serving.branch }}</strong> at <code>{{ serving.short_sha }}</code> ({{ serving.date }}).</p>{% endif %}
+    {% if serving %}<p>Serving <strong>{{ serving.branch }}</strong> to the public at <code>{{ serving.short_sha }}</code> ({{ serving.date }}).</p>{% endif %}
     {% else %}
     <input type="hidden" name="stories_branch" value="{{ site.stories_branch }}">
     <p>Nothing has been pushed yet. Push a branch and it will show up here.</p>

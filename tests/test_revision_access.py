@@ -160,7 +160,9 @@ class PublishedBranchSettingTests(_TwoBranchRepo):
         page = self.client.get("/admin/site").text
         self.assertIn('<option value="main">main</option>', page)
         self.assertIn('<option value="published" selected>published</option>', page)
-        self.assertIn(f"Serving <strong>published</strong> at <code>{self.second[:7]}</code>", page)
+        self.assertIn(
+            f"Serving <strong>published</strong> to the public at <code>{self.second[:7]}</code>", page
+        )
 
     def test_choosing_a_branch_publishes_it_and_moves_head(self) -> None:
         login(self.client)
@@ -176,7 +178,7 @@ class PublishedBranchSettingTests(_TwoBranchRepo):
         login(self.client)
         form = self._site_form() | {"stories_branch": "nope"}
         response = self.client.post("/admin/site", data=form, follow_redirects=True)
-        self.assertIn("does not exist", response.text)
+        self.assertIn("The branch nope can&#39;t be found.", response.text)
         self.assertEqual(json.loads(self.site_path.read_text())["stories_branch"], "published")
 
     def test_missing_branch_shows_nothing_and_warns_admin(self) -> None:
@@ -185,8 +187,8 @@ class PublishedBranchSettingTests(_TwoBranchRepo):
         )
         self.assertNoLeak("/works/s/story")
         self.assertNotIn(b"Story", self.client.get("/").content)
-        self.assertNotIn(b"doesn't exist", self.client.get("/").content)
+        self.assertNotIn(b"be found", self.client.get("/").content)
         login(self.client)
         admin = self.client.get("/admin").text
-        self.assertIn("<strong>gone</strong> doesn't exist", admin)
+        self.assertIn("published branch <strong>gone</strong> can't be found", admin)
         self.assertIn('<option value="gone" selected>gone (missing)</option>', self.client.get("/admin/site").text)

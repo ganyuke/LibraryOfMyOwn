@@ -41,7 +41,7 @@
   </header>
   <main class="site-shell content">
     {% if missing_branch %}
-    <p class="error">The published branch <strong>{{ missing_branch }}</strong> doesn't exist in the repository, so the site is showing nothing. Push it, or pick another branch in <a href="/admin/site">Site settings</a>.</p>
+    <p class="error">Your site is empty because the published branch <strong>{{ missing_branch }}</strong> can't be found. Push it, or pick another branch in <a href="/admin/site">Site settings</a>.</p>
     {% endif %}
     {% block breadcrumbs %}{% endblock %}
     {% block content %}{% endblock %}

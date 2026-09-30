@@ -526,7 +526,7 @@ def admin_site_post(request: Request, form: FormData) -> Response:
     current = effective_branch(state.site()) or ""
     # Only existing branches can be chosen; an unchanged (possibly missing) value is kept as is.
     if branch != current and not state.store.set_default_branch(branch):
-        flash(request, f"Branch {branch!r} does not exist.", error=True)
+        flash(request, f"The branch {branch} can't be found.", error=True)
         return redirect("/admin/site")
     with state.config.edit() as site:
         site.public_url = normalize_public_url(str(form.get("public_url", "")))
@@ -644,7 +644,7 @@ def admin_maintenance_post(request: Request, form: FormData) -> Response:
         text = "PDF cache cleared."
     elif action == "clear_runtime_caches":
         clear_runtime_caches(state.store, state.snapshots)
-        text = "Runtime caches cleared."
+        text = "Story metadata cache cleared."
     elif action == "run_git_gc":
         state.worker.request_gc()
         text = "Collecting all your garbage in the background. Reload in a moment to see the result."
