@@ -431,8 +431,9 @@ def admin_authorship_get(request: Request) -> Response:
         {
             "default_author": site.default_author,
             "default_author_rule": site.default_author_rule,
-            "work_paths": sorted(snapshot.paths, key=str.lower),
-            "exception_paths": exception_paths,
+            "available_paths": [
+                p for p in sorted(snapshot.paths, key=str.lower) if p not in exception_paths
+            ],
             "exceptions": exceptions,
             "identities": snapshot.author_identities(),
             "author_aliases": site.author_aliases,

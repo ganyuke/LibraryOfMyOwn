@@ -587,7 +587,6 @@ h1 {
 
 .authorship-default-author {
   display: block;
-  max-width: 20rem;
   margin-top: 0.75rem;
 }
 
@@ -629,10 +628,6 @@ h1 {
 .authorship-add-exception select,
 .authorship-add-exception input[type="text"],
 .authorship-identity-row input[type="text"] {
-  width: 100%;
-}
-
-.authorship-add-action .admin-btn {
   width: 100%;
 }
 
@@ -703,16 +698,12 @@ h1 {
 
   .authorship-exceptions-head,
   .authorship-exception-row {
-    grid-template-columns: minmax(12rem, 1fr) 10rem minmax(10rem, 14rem) 2.5rem;
+    grid-template-columns: minmax(0, 2fr) 7rem minmax(0, 1fr) 2.5rem;
   }
 
   .authorship-identities-head,
   .authorship-identity-row {
     grid-template-columns: minmax(14rem, 1fr) minmax(10rem, 16rem);
-  }
-
-  .authorship-add-exception {
-    grid-template-columns: minmax(12rem, 1fr) 10rem minmax(10rem, 14rem) 5rem;
   }
 
   .crosspost-rows-head,
@@ -1109,21 +1100,28 @@ fieldset.work-panel {
   font: inherit;
 }
 
-.admin-page.continuity-admin {
-  max-width: none;
-}
-
-.continuity-form {
-  width: 100%;
-}
-
-.continuity-admin .admin-panels-grid {
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.continuity-admin .admin-panel {
+/* Fieldsets won't shrink below their widest content by default, and a dropdown is
+   as wide as its longest option, so one long title used to stretch a whole panel.
+   Keep every panel at the page width and let long text wrap inside it. */
+.admin-page fieldset,
+.admin-page label {
   min-width: 0;
+}
+
+.admin-page select {
+  max-width: 100%;
+}
+
+/* A long story title as a panel heading would wrap across the panel border. */
+.admin-page legend {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-page :is(label, code, li, .admin-list-item-body) {
+  overflow-wrap: anywhere;
 }
 
 .continuity-admin-unpublished {
@@ -1241,12 +1239,6 @@ fieldset.admin-panel {
   gap: 1rem;
 }
 
-@media (min-width: 36rem) {
-  .admin-panels-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
 .admin-choice-list {
   display: grid;
   gap: 0.35rem;
@@ -1255,7 +1247,8 @@ fieldset.admin-panel {
   padding-right: 0.25rem;
 }
 
-.admin-choice {
+.admin-choice,
+.admin-form label.admin-choice {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.15rem 0.5rem;

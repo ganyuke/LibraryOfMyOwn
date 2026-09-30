@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from libmyown.site_config import SiteConfig, save_site_config
 
-from tests.support import csrf_from, login, make_client, make_data_dir
+from tests.support import login, make_client, make_data_dir
 
 NO_WORKS = "No works yet. Push some stories and they will show up here."
 
@@ -22,10 +21,13 @@ class EmptyRepositoryTests(unittest.TestCase):
             save_site_config(data_dir / "site.json", SiteConfig(flags={}))
             client = make_client(data_dir)
             login(client)
-            for path in ("/admin/crossposts", "/admin/continuity", "/admin/history", "/admin/authorship"):
+            for path in ("/admin/crossposts", "/admin/continuity", "/admin/history"):
                 page = client.get(path)
                 self.assertEqual(page.status_code, 200, path)
                 self.assertIn(NO_WORKS, page.text, path)
+            authorship = client.get("/admin/authorship").text
+            self.assertIn('name="exception_path"', authorship)
+            self.assertNotIn(NO_WORKS, authorship)
             self.assertIn("No flags yet.", client.get("/admin/flags").text)
             merge = client.get("/admin/merge").text
             self.assertIn("Nothing merged yet.", merge)
@@ -34,7 +36,7 @@ class EmptyRepositoryTests(unittest.TestCase):
 
 
 class AuthorshipExceptionTests(unittest.TestCase):
-    def test_form_stays_when_every_work_has_an_exception_and_changes_in_place(self) -> None:
+    def test_form_stays_with_an_empty_list_when_every_work_has_an_exception(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = make_data_dir(tmp)
             client = make_client(data_dir)
@@ -46,21 +48,9 @@ class AuthorshipExceptionTests(unittest.TestCase):
             save_site_config(data_dir / "site.json", site)
             login(client)
             page = client.get("/admin/authorship").text
-            self.assertIn("Add or change an exception", page)
-            self.assertIn("Series/Sample One.md (has an exception)", page)
-
-            client.post(
-                "/admin/authorship",
-                data={
-                    "csrf_token": csrf_from(page),
-                    "action": "add_exception",
-                    "exception_path": "Series/Sample One.md",
-                    "exception_mode": "custom",
-                    "exception_custom": "Someone Else",
-                },
-            )
-            saved = json.loads((data_dir / "site.json").read_text())["work_author_override"]
-            self.assertEqual(saved["Series/Sample One.md"], "Someone Else")
+            select = page.split('name="exception_path"', 1)[1].split("</select>", 1)[0]
+            self.assertIn("Choose…", select)
+            self.assertEqual(select.count("<option"), 1)
 
 
 if __name__ == "__main__":

@@ -61,15 +61,14 @@
   {{ csrf_field(csrf_token) }}
   <input type="hidden" name="action" value="add_exception">
   <fieldset class="admin-panel">
-    <legend>Add or change an exception</legend>
-    {% if work_paths %}
+    <legend>Add exceptions</legend>
     <div class="authorship-add-exception">
       <label>
         Work
         <select name="exception_path" required>
           <option value="" disabled selected>Choose…</option>
-          {% for path in work_paths %}
-          <option value="{{ path }}">{{ path }}{% if path in exception_paths %} (has an exception){% endif %}</option>
+          {% for path in available_paths %}
+          <option value="{{ path }}">{{ path }}</option>
           {% endfor %}
         </select>
       </label>
@@ -89,9 +88,6 @@
         <button type="submit" class="admin-btn">Add</button>
       </div>
     </div>
-    {% else %}
-    <p>No works yet. Push some stories and they will show up here.</p>
-    {% endif %}
   </fieldset>
 </form>
 
