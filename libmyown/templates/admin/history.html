@@ -10,6 +10,7 @@
 {% block content %}
 <div class="admin-page">
 <h1>Suppress revisions</h1>
+{% if paths %}
 <form method="get" class="admin-form">
   <fieldset class="admin-panel">
     <legend>File</legend>
@@ -24,6 +25,12 @@
     {{ admin_show_button() }}
   </fieldset>
 </form>
+{% else %}
+<fieldset class="admin-panel">
+  <legend>File</legend>
+  <p>No works yet. Push some stories and they will show up here.</p>
+</fieldset>
+{% endif %}
 {% if selected_path %}
 <form method="post" class="admin-form">
   {{ csrf_field(csrf_token) }}

@@ -62,6 +62,11 @@
     {% endfor %}
   </ul>
 </fieldset>
+{% else %}
+<fieldset class="admin-panel">
+  <legend>Merges</legend>
+  <p>Nothing merged yet.</p>
+</fieldset>
 {% endif %}
 {% if slug_redirects %}
 <fieldset class="admin-panel">
@@ -73,6 +78,11 @@
     </li>
     {% endfor %}
   </ul>
+</fieldset>
+{% else %}
+<fieldset class="admin-panel">
+  <legend>Redirects</legend>
+  <p>No redirects yet. Merging a work adds one from its old address.</p>
 </fieldset>
 {% endif %}
 </div>

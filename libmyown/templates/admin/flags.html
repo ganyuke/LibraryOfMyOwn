@@ -103,6 +103,11 @@
     {{ admin_show_button() }}
   </fieldset>
 </form>
+{% else %}
+<fieldset class="admin-panel">
+  <legend>Assign to works</legend>
+  <p>No flags yet. Add one above to start marking works.</p>
+</fieldset>
 {% endif %}
 
 {% if selected_flag and flags.get(selected_flag) %}

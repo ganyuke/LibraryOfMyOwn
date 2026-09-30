@@ -26,6 +26,11 @@
     {{ admin_show_button() }}
   </fieldset>
 </form>
+{% else %}
+<fieldset class="admin-panel">
+  <legend>Story</legend>
+  <p>No works yet. Push some stories and they will show up here.</p>
+</fieldset>
 {% endif %}
 
 {% if selected_path and selected_story %}
