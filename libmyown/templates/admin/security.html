@@ -18,7 +18,7 @@
     {% if revealed_git_password %}
     <p class="notice">Copy this password now. It will not be shown again.</p>
     <div class="git-remote-row">
-      <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url">
+      <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url git-password">
       <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
     </div>
     {% else %}
@@ -49,7 +49,7 @@
       </label>
     </fieldset>
     <p class="admin-actions">
-      <button type="submit" class="admin-btn">Save</button>
+      <button type="submit" class="admin-btn admin-btn--primary">Save</button>
     </p>
   </form>
 

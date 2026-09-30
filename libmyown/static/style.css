@@ -20,6 +20,12 @@
   --dot: #bbb;
   --error: #a00;
   --border-strong: #aaa;
+  --button-bg: #eef0f3;
+  --button-border: #858a93;
+  --button-bg-hover: #e1e4e9;
+  --primary-bg: #0645ad;
+  --primary-bg-hover: #003d99;
+  --primary-text: #fff;
   --sans: system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
   color-scheme: light;
@@ -47,6 +53,12 @@ html[data-theme="dark"] {
   --dot: #666;
   --error: #ff8a8a;
   --border-strong: #666;
+  --button-bg: #2a2d33;
+  --button-border: #6b7079;
+  --button-bg-hover: #353941;
+  --primary-bg: #8ab4ff;
+  --primary-bg-hover: #a8c7ff;
+  --primary-text: #121212;
   color-scheme: dark;
 }
 
@@ -1083,10 +1095,18 @@ fieldset.work-panel {
   flex-direction: column;
   gap: 1.25rem;
   max-width: 36rem;
+  /* One font for the whole admin area. Only the page title keeps the site's serif. */
+  font-family: var(--sans);
 }
 
 .admin-page > h1 {
   margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* Form controls don't inherit fonts by default, so browsers fall back to their own. */
+.admin-page :is(button, input, select, textarea) {
+  font: inherit;
 }
 
 .admin-page.continuity-admin {
@@ -1157,8 +1177,9 @@ fieldset.admin-panel {
   font-size: 0.9rem;
   line-height: inherit;
   padding: 0.35rem 0.75rem;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  background: var(--button-bg);
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
@@ -1166,7 +1187,29 @@ fieldset.admin-panel {
 }
 
 .admin-btn:hover {
-  border-color: var(--border-strong);
+  background: var(--button-bg-hover);
+}
+
+.admin-btn:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* The main action of a page (usually Save), so it is easy to find. */
+.admin-btn--primary {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
+  font-weight: 600;
+}
+
+.admin-btn--primary:hover {
+  background: var(--primary-bg-hover);
+  border-color: var(--primary-bg-hover);
+}
+
+.admin-page .git-password {
+  font-family: var(--mono);
 }
 
 .admin-btn--remove {
