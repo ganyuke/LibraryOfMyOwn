@@ -48,11 +48,11 @@
       <div class="crosspost-row">
         <label>
           <span class="visually-hidden">Label</span>
-          <input type="text" name="crosspost_label" value="{{ row.label if row else '' }}">
+          <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="crosspost_label" value="{{ row.label if row else '' }}">
         </label>
         <label>
           <span class="visually-hidden">URL</span>
-          <input type="text" name="crosspost_url" value="{{ row.url if row else '' }}">
+          <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="crosspost_url" value="{{ row.url if row else '' }}">
         </label>
       </div>
       {% endfor %}

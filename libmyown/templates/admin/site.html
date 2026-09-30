@@ -18,24 +18,24 @@
     <legend>Public URL</legend>
     <label>
       <span class="visually-hidden">Public site URL</span>
-      <input type="url" name="public_url" value="{{ site.public_url }}">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="url" name="public_url" value="{{ site.public_url }}">
     </label>
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Site title</legend>
     <label>
       <span class="visually-hidden">Site title</span>
-      <input type="text" name="site_title" value="{{ site.site_title }}">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="site_title" value="{{ site.site_title }}">
     </label>
   </fieldset>
   <fieldset class="admin-panel">
     <legend>Git remote</legend>
     <label>
       Git username
-      <input type="text" name="git_username" value="{{ git_username }}">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="git_username" value="{{ git_username }}">
     </label>
     <div class="git-remote-row">
-      <input type="text" readonly value="{{ git_remote_url }}" id="git-remote-url" class="git-remote-url">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" readonly value="{{ git_remote_url }}" id="git-remote-url" class="git-remote-url">
       <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-remote-url">Copy</button>
     </div>
   </fieldset>

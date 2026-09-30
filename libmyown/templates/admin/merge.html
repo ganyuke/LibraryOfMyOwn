@@ -18,7 +18,7 @@
     <legend>Merge</legend>
     <label>
       Old path
-      <input name="source" list="history-source-paths" required {% if source %}value="{{ source }}"{% endif %}>
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" name="source" list="history-source-paths" required {% if source %}value="{{ source }}"{% endif %}>
       <datalist id="history-source-paths">
         {% for path in paths %}
         <option value="{{ path }}">

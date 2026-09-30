@@ -37,7 +37,7 @@
       <code class="flag-def-id">{{ flag_id }}</code>
       <label class="flag-def-label">
         <span class="flag-field-label visually-hidden">Label</span>
-        <input type="text" name="label-{{ flag_id }}" value="{{ flag.label }}" form="flags-form" required>
+        <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="label-{{ flag_id }}" value="{{ flag.label }}" form="flags-form" required>
       </label>
       <label class="flag-def-color">
         <span class="flag-field-label visually-hidden">Color</span>
@@ -70,11 +70,11 @@
       <div class="flag-def-row">
         <label class="flag-def-id-input">
           <span class="flag-field-label visually-hidden">Id</span>
-          <input type="text" name="new_flag_id" pattern="[A-Za-z0-9_-]+" required>
+          <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="new_flag_id" pattern="[A-Za-z0-9_-]+" required>
         </label>
         <label class="flag-def-label">
           <span class="flag-field-label visually-hidden">Label</span>
-          <input type="text" name="new_flag_label" required>
+          <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="new_flag_label" required>
         </label>
         <label class="flag-def-color">
           <span class="flag-field-label visually-hidden">Color</span>

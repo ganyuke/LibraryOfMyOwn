@@ -18,7 +18,7 @@
     {% if revealed_git_password %}
     <p class="notice">Copy this password now. It will not be shown again.</p>
     <div class="git-remote-row">
-      <input type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url git-password">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" readonly value="{{ revealed_git_password }}" id="git-password" class="git-remote-url git-password">
       <button type="button" class="admin-btn git-remote-copy" data-copy-target="git-password">Copy</button>
     </div>
     {% else %}

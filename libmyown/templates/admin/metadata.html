@@ -15,12 +15,12 @@
   {{ csrf_field(csrf_token) }}
   <fieldset class="admin-panel">
     <legend>Blurb field names</legend>
-    <textarea name="blurb_fields" rows="4" class="admin-lines" aria-label="Blurb fields">{{ blurb_fields | join('\n') }}</textarea>
+    <textarea autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" name="blurb_fields" rows="4" class="admin-lines" aria-label="Blurb fields">{{ blurb_fields | join('\n') }}</textarea>
   </fieldset>
 
   <fieldset class="admin-panel">
     <legend>Metadata field order</legend>
-    <textarea name="field_order" rows="8" class="admin-lines" aria-label="Metadata field order">{{ field_order | join('\n') }}</textarea>
+    <textarea autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" name="field_order" rows="8" class="admin-lines" aria-label="Metadata field order">{{ field_order | join('\n') }}</textarea>
   </fieldset>
 
   {% if discovered_fields %}

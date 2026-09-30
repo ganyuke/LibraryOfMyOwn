@@ -24,7 +24,7 @@
     </label>
     <label class="authorship-default-author" id="default-author-field" {% if default_author_rule == 'earliest' %}hidden{% endif %}>
       Site-wide default author
-      <input type="text" name="default_author" value="{{ default_author }}">
+      <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="default_author" value="{{ default_author }}">
     </label>
   </fieldset>
 
@@ -42,7 +42,7 @@
         <label>
           <span class="visually-hidden">Display name for {{ identity }}</span>
           <input type="hidden" name="identity" value="{{ identity }}">
-          <input type="text" name="alias" value="{{ author_aliases.get(identity, '') }}">
+          <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="alias" value="{{ author_aliases.get(identity, '') }}">
         </label>
       </div>
       {% endfor %}
@@ -82,7 +82,7 @@
       </label>
       <label class="authorship-exception-custom" id="exception-custom-field" hidden>
         Override
-        <input type="text" name="exception_custom">
+        <input autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" type="text" name="exception_custom">
       </label>
       <div class="authorship-add-action">
         <button type="submit" class="admin-btn">Add</button>
