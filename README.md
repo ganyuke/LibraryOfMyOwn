@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/ganyuke/LibraryOfMyOwn/main/scripts
 sudo ./scripts/deploy-pi.sh
 ```
 
-Re-running the script runs `git pull` in `/opt/libmyown/app` and refreshes dependencies. Your data under `/opt/libmyown/data` is preserved. Restart the service afterwards with `sudo systemctl restart libmyown`. If Git complains about "dubious ownership", ensure that you run the command with `su -u libmyown`.
+Re-running the script runs `git pull` in `/opt/libmyown/app` and refreshes dependencies. Your data under `/opt/libmyown/data` is preserved, and the running site is restarted to load the update. If Git complains about "dubious ownership", ensure that you run the command with `su -u libmyown`.
 
 Outdated versions of the script will try to fetch the latest version with a user prompt. Add `-y` to answer yes automatically.
 

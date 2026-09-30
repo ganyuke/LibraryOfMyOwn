@@ -286,6 +286,14 @@ systemctl enable libmyown.service
 
 chown -R "$LIBMYOWN_USER:$LIBMYOWN_USER" "$INSTALL_ROOT"
 
+# restart pre-existing services to load the updated codebase
+RESTARTED=0
+if systemctl is-active --quiet libmyown.service; then
+  echo "==> Restarting libmyown to load the update"
+  systemctl restart libmyown.service
+  RESTARTED=1
+fi
+
 echo
 echo "Deploy complete."
 echo "  App:         $APP_DIR ($GIT_REF)"
@@ -298,10 +306,14 @@ echo
 "$BIN_DIR/uv" --version
 "$VENV_DIR/bin/python" --version
 echo
-echo "Next steps:"
-echo "  1. Edit $APP_DIR/.env if needed (set PUBLIC_URL, secrets are generated on first start)"
-echo "  2. sudo systemctl restart libmyown"
-echo "  3. On first start the admin password is printed once to the log:"
-echo "       sudo journalctl -u libmyown | grep 'Generated admin password'"
-echo "     Log in at /login and change it under Admin -> Security"
-echo "  4. Point Caddy at 127.0.0.1:8000 (see examples/caddy/Caddyfile)"
+if [[ "$RESTARTED" -eq 1 ]]; then
+  echo "The site was restarted and is running the update."
+else
+  echo "Next steps:"
+  echo "  1. Edit $APP_DIR/.env if needed (set PUBLIC_URL, secrets are generated on first start)"
+  echo "  2. sudo systemctl start libmyown"
+  echo "  3. On first start the admin password is printed once to the log:"
+  echo "       sudo journalctl -u libmyown | grep 'Generated admin password'"
+  echo "     Log in at /login and change it under Admin -> Security"
+  echo "  4. Point Caddy at 127.0.0.1:8000 (see examples/caddy/Caddyfile)"
+fi
