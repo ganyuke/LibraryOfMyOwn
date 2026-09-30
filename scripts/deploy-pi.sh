@@ -201,36 +201,33 @@ if [[ -z "${LIBMYOWN_DEPLOY_REEXEC:-}" && -n "$SELF_SUM" ]] \
   exec bash "$APP_DIR/scripts/deploy-pi.sh" "$@"
 fi
 
-echo "==> Installing typst ($TYPST_URL)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
-curl -fsSL "$TYPST_URL" | tar -xJ -C "$tmpdir"
-typst_bin="$(find "$tmpdir" -name typst -type f | head -n 1)"
-if [[ -z "$typst_bin" ]]; then
-  echo "Could not find typst binary in $TYPST_URL" >&2
-  exit 1
-fi
-install -m 755 "$typst_bin" "$BIN_DIR/typst"
 
-echo "==> Installing pandoc ($PANDOC_URL)"
-rm -rf "$tmpdir"/*
-curl -fsSL "$PANDOC_URL" | tar -xz -C "$tmpdir"
-pandoc_bin="$(find "$tmpdir" -path '*/bin/pandoc' -type f | head -n 1)"
-if [[ -z "$pandoc_bin" ]]; then
-  echo "Could not find pandoc binary in $PANDOC_URL" >&2
-  exit 1
-fi
-install -m 755 "$pandoc_bin" "$BIN_DIR/pandoc"
+# Download a tool only when it is missing or its version (URL) changed.
+install_tool() {
+  local name="$1" url="$2" tar_flags="$3" path_pattern="$4"
+  local stamp="$BIN_DIR/.$name.source"
+  if [[ -x "$BIN_DIR/$name" && -f "$stamp" && "$(cat "$stamp")" == "$url" ]]; then
+    echo "==> $name is up to date"
+    return
+  fi
+  echo "==> Installing $name ($url)"
+  rm -rf "${tmpdir:?}"/*
+  curl -fsSL "$url" | tar "$tar_flags" -C "$tmpdir"
+  local bin
+  bin="$(find "$tmpdir" -path "$path_pattern" -type f | head -n 1)"
+  if [[ -z "$bin" ]]; then
+    echo "Could not find the $name binary in $url" >&2
+    exit 1
+  fi
+  install -m 755 "$bin" "$BIN_DIR/$name"
+  printf '%s\n' "$url" >"$stamp"
+}
 
-echo "==> Installing uv ($UV_URL)"
-rm -rf "$tmpdir"/*
-curl -fsSL "$UV_URL" | tar -xz -C "$tmpdir"
-uv_bin="$(find "$tmpdir" -name uv -type f | head -n 1)"
-if [[ -z "$uv_bin" ]]; then
-  echo "Could not find uv binary in $UV_URL" >&2
-  exit 1
-fi
-install -m 755 "$uv_bin" "$BIN_DIR/uv"
+install_tool typst "$TYPST_URL" -xJ '*/typst'
+install_tool pandoc "$PANDOC_URL" -xz '*/bin/pandoc'
+install_tool uv "$UV_URL" -xz '*/uv'
 
 if [[ ! -f "$APP_DIR/uv.lock" ]]; then
   echo "Checkout at $APP_DIR is missing uv.lock." >&2
