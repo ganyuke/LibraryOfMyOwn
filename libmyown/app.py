@@ -13,6 +13,7 @@ from starlette.responses import HTMLResponse, Response
 from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from libmyown.config import Settings, load_settings, require_admin_password
 from libmyown.git_http import AuthenticatedGitApp, mount_path_for_git
@@ -46,6 +47,24 @@ def _session_cookie_secure(settings: Settings, public_url: str) -> bool:
     if settings.https_enabled is not None:
         return settings.https_enabled
     return public_url.strip().lower().startswith("https://")
+
+
+class SiteSessionMiddleware:
+    """Session cookies whose Secure flag follows the current public URL.
+
+    SessionMiddleware fixes the flag at construction, so keep one of each and pick
+    per request. A public URL changed in the admin panel then applies without a restart.
+    """
+
+    def __init__(self, app: ASGIApp, *, settings: Settings, config: ConfigStore, **options) -> None:
+        self._settings = settings
+        self._config = config
+        self._secure = SessionMiddleware(app, https_only=True, **options)
+        self._plain = SessionMiddleware(app, https_only=False, **options)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        secure = _session_cookie_secure(self._settings, self._config.get().public_url)
+        await (self._secure if secure else self._plain)(scope, receive, send)
 
 
 def create_app(settings: Settings | None = None) -> Starlette:
@@ -126,10 +145,11 @@ def create_app(settings: Settings | None = None) -> Starlette:
             Middleware(SecurityHeadersMiddleware),
             Middleware(BodySizeLimitMiddleware),
             Middleware(
-                SessionMiddleware,
+                SiteSessionMiddleware,
+                settings=settings,
+                config=config,
                 secret_key=settings.session_secret,
                 same_site="lax",
-                https_only=_session_cookie_secure(settings, site.public_url),
                 max_age=SESSION_MAX_AGE_SECONDS,
             ),
         ],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import os
 import stat
@@ -93,6 +94,17 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "/login")
         self.assertEqual(load_secrets(self.data_dir / "secrets.json").session_epoch, 1)
+
+    def test_public_url_change_sets_cookie_security_without_restart(self) -> None:
+        def session_cookie() -> str:
+            response = TestClient(self.client.app).get("/login")
+            return next(v for v in response.headers.get_list("set-cookie") if v.startswith("session="))
+
+        self.assertNotIn("secure", session_cookie().lower())
+        site = copy.deepcopy(load_site_config(self.data_dir / "site.json"))
+        site.public_url = "https://stories.example"
+        save_site_config(self.data_dir / "site.json", site)
+        self.assertIn("secure", session_cookie().lower())
 
     def test_regenerated_git_password_never_enters_the_cookie(self) -> None:
         login(self.client)
