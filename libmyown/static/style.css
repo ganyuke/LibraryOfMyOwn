@@ -92,26 +92,26 @@ body {
 
 .site-nav {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.5rem 1.5rem;
   font-family: var(--sans);
   font-size: 0.95rem;
 }
 
+/* On narrow screens whole links wrap to the next row; no label breaks in two. */
 .site-nav-primary,
 .site-nav-secondary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   min-width: 0;
 }
 
-.site-nav-secondary {
-  flex-shrink: 0;
-}
-
-.site-nav-meta {
+.site-nav a,
+.site-nav button {
   white-space: nowrap;
 }
 
@@ -1013,6 +1013,47 @@ fieldset.work-panel {
 
 .history-form {
   margin-bottom: 1.5rem;
+}
+
+/* Phones: keep the two radio columns, stack the rest of each revision beside them. */
+@media (max-width: 39.99rem) {
+  .history-list,
+  .history-list thead,
+  .history-list tbody {
+    display: block;
+  }
+
+  .history-list tr {
+    display: grid;
+    grid-template-columns: 3rem 3rem minmax(0, 1fr);
+    border-bottom: 1px solid var(--border);
+    padding: 0.4rem 0;
+  }
+
+  .history-list th,
+  .history-list td {
+    border-bottom: none;
+    padding: 0 0.5rem;
+  }
+
+  .history-list th:nth-child(n + 3) {
+    display: none;
+  }
+
+  .history-list td.history-radio {
+    grid-row: 1 / span 4;
+    align-self: center;
+  }
+
+  .history-list td:nth-child(n + 3) {
+    grid-column: 3;
+  }
+
+  .history-list td:nth-child(4),
+  .history-list td:nth-child(5) {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
 }
 
 .history-actions {
