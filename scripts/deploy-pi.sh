@@ -23,6 +23,7 @@
 #   TYPST_URL=...                                       override typst download URL
 #   PANDOC_URL=...                                      override pandoc download URL
 #   UV_URL=...                                          override uv download URL
+#   TYPST_SHA256=... PANDOC_SHA256=... UV_SHA256=...    expected download checksum (required with another version or URL)
 
 set -euo pipefail
 
@@ -136,6 +137,35 @@ default_uv_url() {
   printf 'https://github.com/astral-sh/uv/releases/download/%s/uv-%s.tar.gz\n' "$UV_VERSION" "$target"
 }
 
+# SHA256 of each release archive the default versions can download, checked
+# before anything is unpacked. Bump these together with the default versions.
+known_sha256() {
+  case "$1" in
+    https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-unknown-linux-musl.tar.xz)
+      echo a6d077d0a95eed5a2eba715b2dae06be954f624ccbf85758a03f389ded33118c ;;
+    https://github.com/typst/typst/releases/download/v0.15.1/typst-aarch64-unknown-linux-musl.tar.xz)
+      echo 5aa8d74a3d906e60ea12a66ac2f37f8eef1b14cbad7182a745e393a10c23dcee ;;
+    https://github.com/typst/typst/releases/download/v0.15.1/typst-armv7-unknown-linux-musleabi.tar.xz)
+      echo 44986312e557b9ac0f2c71d5d5156c0ad93b2da374d54c859d6c0c7c0b73709f ;;
+    https://github.com/typst/typst/releases/download/v0.15.1/typst-riscv64gc-unknown-linux-gnu.tar.xz)
+      echo ec735f732c6a9940c4ef08223b50404396537ad34713eb883ef3bb310b396e5a ;;
+    https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-amd64.tar.gz)
+      echo 37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6 ;;
+    https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz)
+      echo 56ed5566ec41d22ec9ee0704e6ac0b98ba102e92384efd5306173a22d314c79a ;;
+    https://github.com/astral-sh/uv/releases/download/0.12.20/uv-x86_64-unknown-linux-gnu.tar.gz)
+      echo 6590717592ace991ff83a63fef799e3ad9d33ecc8f96c5d6bdd732496e79337f ;;
+    https://github.com/astral-sh/uv/releases/download/0.12.20/uv-aarch64-unknown-linux-gnu.tar.gz)
+      echo 8a7aad7bc76a2fae5151566ff3e43eacce0b2a113d5e4de3e4afe3e58fa2441e ;;
+    https://github.com/astral-sh/uv/releases/download/0.12.20/uv-armv7-unknown-linux-gnueabihf.tar.gz)
+      echo e1c53318608448ad3b8e7f2e9b069936730a6e7b47831ba5446e4b4f436ee715 ;;
+    https://github.com/astral-sh/uv/releases/download/0.12.20/uv-arm-unknown-linux-musleabihf.tar.gz)
+      echo 6aeef64cf07b43135d6b1c20bd57809f2d965d0f8a2d5602230d5d55b8245477 ;;
+    https://github.com/astral-sh/uv/releases/download/0.12.20/uv-riscv64gc-unknown-linux-gnu.tar.gz)
+      echo 5cb9df36ca64fb72673c59a77b955b50f3bb907689a98d1d8d640aa3e71f2660 ;;
+  esac
+}
+
 default_repo_url() {
   local script_path="${BASH_SOURCE[0]:-$0}"
   if [[ -f "$script_path" ]]; then
@@ -154,6 +184,7 @@ need_cmd curl
 need_cmd tar
 need_cmd xz
 need_cmd install
+need_cmd sha256sum
 need_cmd git
 need_cmd rsync
 
@@ -165,6 +196,9 @@ MACHINE="$(uname -m)"
 TYPST_URL="${TYPST_URL:-$(default_typst_url)}"
 PANDOC_URL="${PANDOC_URL:-$(default_pandoc_url)}"
 UV_URL="${UV_URL:-$(default_uv_url)}"
+TYPST_SHA256="${TYPST_SHA256:-$(known_sha256 "$TYPST_URL")}"
+PANDOC_SHA256="${PANDOC_SHA256:-$(known_sha256 "$PANDOC_URL")}"
+UV_SHA256="${UV_SHA256:-$(known_sha256 "$UV_URL")}"
 
 echo "==> Creating layout under $INSTALL_ROOT (arch: $MACHINE)"
 install -d -m 755 "$INSTALL_ROOT" "$BIN_DIR" "$DATA_DIR" "$PDF_SCRIPTS_DIR"
@@ -206,17 +240,31 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 # Download a tool only when it is missing or its version (URL) changed.
 install_tool() {
-  local name="$1" url="$2" tar_flags="$3" path_pattern="$4"
+  local name="$1" url="$2" sha256="$3" tar_flags="$4" path_pattern="$5"
   local stamp="$BIN_DIR/.$name.source"
   if [[ -x "$BIN_DIR/$name" && -f "$stamp" && "$(cat "$stamp")" == "$url" ]]; then
     echo "==> $name is up to date"
     return
   fi
+  local var="${name^^}_SHA256"
+  if [[ -z "$sha256" ]]; then
+    echo "Can't check the $name download from $url because this script doesn't know what it should look like." >&2
+    echo "Set $var to the SHA256 listed on its release page and run again." >&2
+    exit 1
+  fi
   echo "==> Installing $name ($url)"
   rm -rf "${tmpdir:?}"/*
-  curl -fsSL "$url" | tar "$tar_flags" -C "$tmpdir"
+  local archive="$tmpdir/download" unpacked="$tmpdir/unpacked"
+  curl -fsSL -o "$archive" "$url"
+  if ! echo "${sha256,,}  $archive" | sha256sum --check --status 2>/dev/null; then
+    echo "The $name download from $url doesn't match the expected checksum, so it was not installed." >&2
+    echo "Try again later. If you set $var yourself, check it against the release page." >&2
+    exit 1
+  fi
+  mkdir "$unpacked"
+  tar "$tar_flags" -f "$archive" -C "$unpacked"
   local bin
-  bin="$(find "$tmpdir" -path "$path_pattern" -type f | head -n 1)"
+  bin="$(find "$unpacked" -path "$path_pattern" -type f | head -n 1)"
   if [[ -z "$bin" ]]; then
     echo "Could not find the $name binary in $url" >&2
     exit 1
@@ -225,9 +273,9 @@ install_tool() {
   printf '%s\n' "$url" >"$stamp"
 }
 
-install_tool typst "$TYPST_URL" -xJ '*/typst'
-install_tool pandoc "$PANDOC_URL" -xz '*/bin/pandoc'
-install_tool uv "$UV_URL" -xz '*/uv'
+install_tool typst "$TYPST_URL" "$TYPST_SHA256" -xJ '*/typst'
+install_tool pandoc "$PANDOC_URL" "$PANDOC_SHA256" -xz '*/bin/pandoc'
+install_tool uv "$UV_URL" "$UV_SHA256" -xz '*/uv'
 
 if [[ ! -f "$APP_DIR/uv.lock" ]]; then
   echo "Checkout at $APP_DIR is missing uv.lock." >&2
