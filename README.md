@@ -57,6 +57,19 @@ If you choose not to use Caddy, ensure your reverse proxy forwards the header `X
 
 If `PUBLIC_URL` is `https://` and you want to log in over plain `http://` (e.g. local testing), set `HTTPS_ENABLED=false`.
 
+### Backups
+
+This project does not do automated backups, so you'll have to do them yourself. The most important files that you probably want to keep are the following: 
+
+- `/opt/libmyown/data/stories.git`: your stories and their history. You can also re-push from your writing repo, but if you've rebased or amended since, any history you hid will show up again.
+- `/opt/libmyown/data/site.json`: everything you set in the admin panel, including hidden revisions
+- `/opt/libmyown/data/secrets.json`: your passwords. Keep it private!
+- `/opt/libmyown/app/.env`: if you edited it
+
+Everything else in the data directory rebuilds itself.
+
+To restore, run the deploy script on the new machine, stop the service, copy the files back into `/opt/libmyown/data`, `chown` them to `libmyown`, and start it again.
+
 ## Run demo
 
 ```bash
