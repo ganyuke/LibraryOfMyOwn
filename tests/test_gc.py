@@ -27,7 +27,9 @@ class GcTests(unittest.TestCase):
         self.data_dir = make_data_dir(self.root)
         self.bare = self.data_dir / "stories.git"
         # Keep every push as its own pack, like dulwich's receive-pack does.
+        # Git 2.55 otherwise runs geometric maintenance after each push.
         git(self.bare, "config", "receive.unpackLimit", "1")
+        git(self.bare, "config", "receive.autogc", "false")
         self.work = self.root / "work"
         git(self.root, "clone", "-q", str(self.bare), "work")
         self.store = GitStore(self.bare)
