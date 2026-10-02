@@ -147,7 +147,7 @@ def load_settings() -> Settings:
         data_dir=data_dir,
         pdf_scripts=pdf_scripts,
         host=os.environ.get("HOST", "127.0.0.1"),
-        port=int(os.environ.get("PORT", "8000")),
+        port=int(os.environ.get("PORT", "4033")),
         https_enabled=_env_bool("HTTPS_ENABLED"),
         secrets=secrets,
         trusted_proxies=os.environ.get("TRUSTED_PROXIES", "127.0.0.1").strip() or "127.0.0.1",

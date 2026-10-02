@@ -14,37 +14,30 @@ Restart=on-failure
 RestartSec=5
 
 # --- Hardening -------------------------------------------------------------
-# Check with: systemd-analyze security libmyown
-#
-# What the service actually needs, and nothing else:
-#   - listen on 127.0.0.1:8000 (an unprivileged port, so no capabilities;
-#     Caddy owns 80/443)
-#   - write to the data directory (stories.git, site.json, secrets.json,
-#     PDF cache)
-#   - run child processes: git (gc), nice/ionice, pandoc, typst, and python
-#     for PDF builds
+# Check the result with systemd-analyze security libmyown
 
-# No capabilities, no privilege gain, not even through setuid binaries.
+# Block admin rights
 CapabilityBoundingSet=
 AmbientCapabilities=
 NoNewPrivileges=true
 RestrictSUIDSGID=true
 
-# Read-only filesystem except the data directory.
+# Make the filesystem read-only except the data directory (if you change
+# DATA_DIR in .env, set ReadWritePaths to the same path)
 ProtectSystem=strict
 ReadWritePaths=/opt/libmyown/data
 ProtectHome=true
 PrivateTmp=true
 UMask=0077
 
-# Network: TCP to serve HTTP; AF_UNIX for logging and user lookups (git).
+# Allow connections from the local reverse proxy only (if you run Caddy on
+# another machine, add its address to IPAddressAllow and to TRUSTED_PROXIES
+# in .env)
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-# Only the local reverse proxy can connect. If Caddy runs on another machine,
-# add its address here and to TRUSTED_PROXIES in .env.
 IPAddressDeny=any
 IPAddressAllow=localhost
 
-# Kernel, devices, and other processes are off limits.
+# Block access to the kernel, devices and other processes
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -58,15 +51,14 @@ RestrictRealtime=true
 LockPersonality=true
 RemoveIPC=true
 
-# Ordinary service syscalls only. @system-service includes setpriority and
-# ioprio_set, which nice/ionice use to run git gc at low priority.
+# Limit system calls to what ordinary services use
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged
 
-# Not set: MemoryDenyWriteExecute. Some PDF toolchains (pandoc's runtime, or
-# custom builders using ctypes/cffi) may need writable+executable memory.
-# Add it if your builders work with it.
+# Optional: block writable and executable memory, which can break PDF builds
+# (if you uncomment it, check that a PDF download still works)
+#MemoryDenyWriteExecute=true
 
 [Install]
 WantedBy=multi-user.target

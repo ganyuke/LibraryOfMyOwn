@@ -15,9 +15,13 @@ If you want your friends to be able to download your stories as PDFs, you can po
 
 ## Deploy
 
+This project supports two deployment types. I do a bare metal install, so that's the one I will personally support the most. The other is a containterized install for Docker and Podman.
+
+### Bare metal
+
 This project contains a script that can deploy LibraryOfMyOwn on a Debian Linux system (specifically intended for a Raspberry Pi 4B on Raspbian Trixie, but it should work on any Debian Linux or Debian derivative like Ubuntu Server).
 
-The deployment script is fairly self-contained, installing the project itself and its dependencies under `/opt/libmyown`. The script auto-detects CPU architecture and downloads matching [Typst 0.15.1](https://github.com/typst/typst/releases/tag/v0.15.1) and [Pandoc 3.11](https://github.com/jgm/pandoc/releases/tag/3.11) binaries into `/opt/libmyown/bin`, creates a system `libmyown` user, and enables the `libmyown` systemd unit.
+The deployment script is fairly self-contained, installing the project itself and its dependencies under `/opt/libmyown`. The script auto-detects CPU architecture and downloads matching [Typst 0.15.1](https://github.com/typst/typst/releases/tag/v0.15.1) and [Pandoc 3.12](https://github.com/jgm/pandoc/releases/tag/3.12) binaries into `/opt/libmyown/bin`, creates a system `libmyown` user, and enables the `libmyown` systemd unit.
 
 **Fresh system install:**
 
@@ -42,6 +46,31 @@ Your startup configuration can be done through environment variables (`.env`). T
 On first start, the service prints a generated admin password to its log (`sudo journalctl -u libmyown | grep 'Generated admin password'`). Log in and change it under **Admin → Security**, or set `ADMIN_PASSWORD` in `.env` before the first start to choose your own.
 
 Edit `/opt/libmyown/app/.env` (from `examples/env.example`), start the service, then log in at `/login`.
+
+### Docker
+
+You can deploy using Docker on amd64 and arm64 via this project's GitHub containers. PDF downloads work out of the box. You will need to set up a reverse proxy separately.
+
+```bash
+docker run -d --name libmyown -p 127.0.0.1:4033:4033 \
+  -v libmyown-data:/data \
+  --env-file .env \
+  ghcr.io/ganyuke/libraryofmyown:latest
+docker logs libmyown 2>&1 | grep 'Generated admin password'
+```
+
+> [!CAUTION]
+> Make sure you pass in a volume or you will lose your data on restart!
+
+To update, pull the new image and recreate the container:
+
+```bash
+docker pull ghcr.io/ganyuke/libraryofmyown:latest
+docker rm -f libmyown
+# then run the same `docker run` command as before
+```
+
+You can also deploy this project through Docker Compose, using [`examples/docker/compose.yaml`](examples/docker/compose.yaml). Replace `your.domain` with, well, your domain, in both `compose.yaml` and `Caddyfile`, then run `docker compose up -d`. The compose file includes Caddy with rateliimting by default, which fetches TLS certificates for you and rate limits logins, git access and PDF downloads. The first start takes a few minutes while Caddy is built.
 
 ## Post-setup
 
@@ -68,6 +97,8 @@ This project does not do automated backups, so you'll have to do them yourself. 
 
 Everything else in the data directory rebuilds itself.
 
+With Docker, the same files are in the `/data` volume. You can copy them out with `docker cp libmyown:/data ./libmyown-backup`.
+
 To restore, run the deploy script on the new machine, stop the service, copy the files back into `/opt/libmyown/data`, `chown` them to `libmyown`, and start it again.
 
 ## Run demo
@@ -78,7 +109,7 @@ uv run python -m libmyown.main
 
 The app reads `.env` from the project root on its own.
 
-Open http://127.0.0.1:8000 and log in at `/login` with your `ADMIN_PASSWORD`, or with the generated password printed in the terminal on first start.
+Open http://127.0.0.1:4033 and log in at `/login` with your `ADMIN_PASSWORD`, or with the generated password printed in the terminal on first start.
 
 ### Sample data
 

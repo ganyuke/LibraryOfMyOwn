@@ -1,0 +1,56 @@
+# LibraryOfMyOwn behind Caddy with automatic HTTPS and rate limiting.
+#
+#   1. Replace your.domain here and in Caddyfile.
+#   2. docker compose up -d (the first start takes a few minutes to build Caddy)
+#   3. docker compose logs libmyown | grep 'Generated admin password'
+#
+# Update Caddy: docker compose build --pull caddy && docker compose up -d
+#
+# Your stories, settings, and passwords live in the libmyown-data volume.
+
+services:
+  libmyown:
+    image: ghcr.io/ganyuke/libraryofmyown:latest
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - libmyown-data:/data
+    environment:
+      # Only read on first start. Change it later under Admin -> Site settings.
+      PUBLIC_URL: https://your.domain
+      # Trust the Docker network gateway range for if you're setting this up
+      # beside a Caddy container.
+      TRUSTED_PROXIES: 172.31.250.0/24
+      # Optional: choose the first admin password instead of having one generated.
+      # ADMIN_PASSWORD: ""
+    networks:
+      - web
+
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+
+networks:
+  web:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+
+volumes:
+  libmyown-data:
+  caddy-data:
+  caddy-config:

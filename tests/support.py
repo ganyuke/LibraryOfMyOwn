@@ -49,7 +49,7 @@ def make_settings(data_dir: Path, *, pdf_scripts: Path | None = None) -> Setting
         data_dir=data_dir,
         pdf_scripts=pdf_scripts,
         host="127.0.0.1",
-        port=8000,
+        port=4033,
         https_enabled=None,
         secrets=secrets,
     )

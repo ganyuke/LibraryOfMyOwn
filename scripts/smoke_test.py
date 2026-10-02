@@ -34,6 +34,18 @@ def main() -> int:
     settings = load_settings()
     secrets_path = settings.secrets_path
     secrets_backup = secrets_path.read_bytes() if secrets_path.is_file() else None
+    try:
+        return run_checks(settings)
+    finally:
+        # Restore even when an early check fails, so a real instance keeps its passwords.
+        if secrets_backup is not None:
+            secrets_path.write_bytes(secrets_backup)
+        elif secrets_path.is_file():
+            secrets_path.unlink()
+
+
+def run_checks(settings) -> int:
+    secrets_path = settings.secrets_path
     if secrets_path.is_file():
         secrets_path.unlink()
 
@@ -240,10 +252,6 @@ def main() -> int:
         print("OK history merge")
     finally:
         save_site_config(site_path, site_backup)
-        if secrets_backup is not None:
-            secrets_path.write_bytes(secrets_backup)
-        elif secrets_path.is_file():
-            secrets_path.unlink()
 
     print("All smoke tests passed.")
     return 0

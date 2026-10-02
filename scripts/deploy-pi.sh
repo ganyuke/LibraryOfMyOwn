@@ -18,7 +18,7 @@
 #   INSTALL_ROOT=/opt/libmyown                          install location (default)
 #   LIBMYOWN_USER=libmyown                              system user (created if missing)
 #   TYPST_VERSION=0.15.1                                typst release (default)
-#   PANDOC_VERSION=3.11                                 pandoc release (default)
+#   PANDOC_VERSION=3.12                                 pandoc release (default)
 #   UV_VERSION=0.12.20                                  uv release (default)
 #   TYPST_URL=...                                       override typst download URL
 #   PANDOC_URL=...                                      override pandoc download URL
@@ -69,7 +69,7 @@ LIBMYOWN_USER="${LIBMYOWN_USER:-libmyown}"
 GIT_REF="${GIT_REF:-main}"
 DEFAULT_REPO_URL="https://github.com/ganyuke/LibraryOfMyOwn.git"
 TYPST_VERSION="${TYPST_VERSION:-0.15.1}"
-PANDOC_VERSION="${PANDOC_VERSION:-3.11}"
+PANDOC_VERSION="${PANDOC_VERSION:-3.12}"
 UV_VERSION="${UV_VERSION:-0.12.20}"
 
 APP_DIR="$INSTALL_ROOT/app"
@@ -149,10 +149,10 @@ known_sha256() {
       echo 44986312e557b9ac0f2c71d5d5156c0ad93b2da374d54c859d6c0c7c0b73709f ;;
     https://github.com/typst/typst/releases/download/v0.15.1/typst-riscv64gc-unknown-linux-gnu.tar.xz)
       echo ec735f732c6a9940c4ef08223b50404396537ad34713eb883ef3bb310b396e5a ;;
-    https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-amd64.tar.gz)
-      echo 37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6 ;;
-    https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz)
-      echo 56ed5566ec41d22ec9ee0704e6ac0b98ba102e92384efd5306173a22d314c79a ;;
+    https://github.com/jgm/pandoc/releases/download/3.12/pandoc-3.12-linux-amd64.tar.gz)
+      echo 67d7d011fed8c8543306022b985b9b2499ab9b74818df91d8727c7e9ebc5ba06 ;;
+    https://github.com/jgm/pandoc/releases/download/3.12/pandoc-3.12-linux-arm64.tar.gz)
+      echo 6cefcf7100e23a99447c26f89d1ff5b253f3407fcef99a9e27ae06f3ed16cb82 ;;
     https://github.com/astral-sh/uv/releases/download/0.12.20/uv-x86_64-unknown-linux-gnu.tar.gz)
       echo 6590717592ace991ff83a63fef799e3ad9d33ecc8f96c5d6bdd732496e79337f ;;
     https://github.com/astral-sh/uv/releases/download/0.12.20/uv-aarch64-unknown-linux-gnu.tar.gz)
@@ -363,5 +363,5 @@ else
   echo "  3. On first start the admin password is printed once to the log:"
   echo "       sudo journalctl -u libmyown | grep 'Generated admin password'"
   echo "     Log in at /login and change it under Admin -> Security"
-  echo "  4. Point Caddy at 127.0.0.1:8000 (see examples/caddy/Caddyfile)"
+  echo "  4. Point Caddy at 127.0.0.1:4033 (see examples/caddy/Caddyfile)"
 fi

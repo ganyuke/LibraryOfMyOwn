@@ -1,0 +1,7 @@
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!libmyown/
+!pdf-scripts/
+**/__pycache__

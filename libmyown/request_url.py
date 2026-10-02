@@ -20,5 +20,5 @@ def request_origin(request: Request, site: SiteConfig) -> str:
         return configured
     host = request.headers.get("host", request.url.netloc)
     if not host:
-        return "http://localhost:8000"
+        return "http://localhost:4033"
     return f"{request.url.scheme}://{host}"
