@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,10 +28,6 @@ func FormatSimpleDate(date time.Time) string {
 	return date.UTC().Format("2 January 2006")
 }
 
-func isMarkdown(entry os.DirEntry) bool {
-	return !entry.IsDir() && filepath.Ext(entry.Name()) == ".md"
-}
-
 func isShortSha(hex string) bool {
 	if hex == "" || len(hex) != 7 {
 		return false
@@ -46,32 +41,6 @@ func isShortSha(hex string) bool {
 	}
 
 	return true
-}
-
-func findStories(root string) ([]string, error) {
-	var stories []string
-
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if isMarkdown(entry) {
-			relativePath, err := filepath.Rel(root, path)
-			if err != nil {
-				return err
-			}
-			stories = append(stories, relativePath)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		log.Println("Could not walk stories:", err)
-	}
-
-	return stories, err
 }
 
 // generic HTTP writer handler to buffer responses before sending them over the wire
