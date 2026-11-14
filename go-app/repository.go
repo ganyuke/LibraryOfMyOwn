@@ -10,10 +10,10 @@ import (
 )
 
 type FileRevision struct {
-	CommitHash string
-	Author     string
-	Date       time.Time
-	Path       string
+	Hash   string
+	Author string
+	Date   time.Time
+	Path   string
 }
 
 type RevisionHistory = map[string][]FileRevision
@@ -112,10 +112,10 @@ func walkHistory(repo *git.Repository, head *object.Commit) (RevisionHistory, er
 				}
 
 				revisionList[currentPath] = append(revisionList[currentPath], FileRevision{
-					CommitHash: commit.Hash.String(),
-					Author:     commit.Author.Name,
-					Date:       commit.Committer.When,
-					Path:       path,
+					Hash:   commit.Hash.String(),
+					Author: commit.Author.Name,
+					Date:   commit.Committer.When,
+					Path:   path,
 				})
 			}
 
@@ -151,8 +151,9 @@ func walkHistory(repo *git.Repository, head *object.Commit) (RevisionHistory, er
 			// "" -> to - file creation
 			// from -> to - file modification
 			// from -> "" - file deletion
-			path := change.To.Name
-			if path == "" {
+			oldPath := change.From.Name
+			newPath := change.To.Name
+			if newPath == "" {
 				continue
 			}
 
@@ -160,16 +161,6 @@ func walkHistory(repo *git.Repository, head *object.Commit) (RevisionHistory, er
 			if !trackedFile {
 				continue
 			}
-
-			revisionList[currentPath] = append(revisionList[currentPath], FileRevision{
-				CommitHash: commit.Hash.String(),
-				Author:     commit.Author.Name,
-				Date:       commit.Committer.When,
-				Path:       change.To.Name,
-			})
-
-			oldPath := change.From.Name
-			newPath := change.To.Name
 
 			switch {
 			case oldPath == "":
@@ -183,11 +174,11 @@ func walkHistory(repo *git.Repository, head *object.Commit) (RevisionHistory, er
 				tracked[oldPath] = currentPath
 			}
 
-			revisionList[path] = append(revisionList[path], FileRevision{
-				CommitHash: commit.Hash.String(),
-				Author:     commit.Author.Name,
-				Date:       commit.Committer.When,
-				Path:       oldPath,
+			revisionList[currentPath] = append(revisionList[currentPath], FileRevision{
+				Hash:   commit.Hash.String(),
+				Author: commit.Author.Name,
+				Date:   commit.Committer.When,
+				Path:   newPath,
 			})
 		}
 

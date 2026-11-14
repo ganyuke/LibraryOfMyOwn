@@ -9,7 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
+
+type HistoryPageData struct {
+	Entry     StoryIndexEntry
+	Revisions []FileRevision
+}
 
 // mediawiki style date
 func FormatTimestamp(date time.Time) string {
@@ -23,6 +31,21 @@ func FormatSimpleDate(date time.Time) string {
 
 func isMarkdown(entry os.DirEntry) bool {
 	return !entry.IsDir() && filepath.Ext(entry.Name()) == ".md"
+}
+
+func isShortSha(hex string) bool {
+	if hex == "" || len(hex) != 7 {
+		return false
+	}
+
+	for _, char := range hex {
+		if !(char >= 'a' && char <= 'f') &&
+			!(char >= '0' && char <= '9') {
+			return false
+		}
+	}
+
+	return true
 }
 
 func findStories(root string) ([]string, error) {
@@ -88,6 +111,9 @@ func main() {
 	funcs := template.FuncMap{
 		"FormatTimestamp":  FormatTimestamp,
 		"FormatSimpleDate": FormatSimpleDate,
+		"ShortHash": func(s string) string {
+			return s[:7]
+		},
 	}
 
 	indexTemplate := template.Must(template.New("index.gohtml").Funcs(funcs).ParseFiles("templates/index.gohtml"))
@@ -99,17 +125,17 @@ func main() {
 		log.Fatal("Could not open stories repository:", err)
 	}
 
-	commit, err := getHeadCommit(repo)
+	headCommit, err := getHeadCommit(repo)
 	if err != nil {
 		log.Fatal("Could not resolve stories HEAD:", err)
 	}
 
-	history, err := walkHistory(repo, commit)
+	history, err := walkHistory(repo, headCommit)
 	if err != nil {
 		log.Fatal("Could not walk history:", err)
 	}
 
-	storyIndex, err := buildStoryIndex(commit, history)
+	storyIndex, err := buildStoryIndex(headCommit, history)
 	if err != nil {
 		log.Fatal("Could not build story index:", err)
 	}
@@ -145,12 +171,30 @@ func main() {
 		path := r.PathValue("path")
 
 		entries, found := indexSlugs[path]
+
+		renderCommit := func(src string, commit *object.Commit) {
+			file, err := readFileAtCommit(commit, src)
+			if err != nil {
+				log.Println("Could not read story:", err)
+				http.Error(w, "Could not read story", http.StatusInternalServerError)
+				return
+			}
+
+			story := parseStory(file, src)
+			storyRendered, err := renderStory(story)
+			if err != nil {
+				http.Error(w, "Could not render story", http.StatusInternalServerError)
+				return
+			}
+
+			renderTemplate(w, storyTemplate, storyRendered)
+		}
+
 		if !found {
 			// handle history path
 			pathSplit := strings.Split(path, "/")
 			if pathSplit[len(pathSplit)-1] == "history" {
 				truncatedPath := path[:len(path)-len("/history")]
-				log.Println(truncatedPath)
 				entries, found := indexSlugs[truncatedPath]
 
 				if !found {
@@ -161,7 +205,61 @@ func main() {
 				entry := entries[0]
 				entryHistory := history[entry.SourcePath]
 
-				renderTemplate(w, historyTemplate, entryHistory)
+				historyPgData := HistoryPageData{
+					Entry:     entry,
+					Revisions: entryHistory,
+				}
+
+				renderTemplate(w, historyTemplate, historyPgData)
+				return
+			}
+
+			shortHash := pathSplit[len(pathSplit)-1]
+			if len(pathSplit) >= 2 && pathSplit[len(pathSplit)-2] == "r" && isShortSha(shortHash) {
+				truncatedPath := path[:len(path)-len("/r/")-7]
+				entries, found := indexSlugs[truncatedPath]
+
+				if !found {
+					http.NotFound(w, r)
+					return
+				}
+
+				entry := entries[0]
+				entryHistory := history[entry.SourcePath]
+
+				var matched FileRevision
+				matches := 0
+
+				for _, revision := range entryHistory {
+					if strings.HasPrefix(revision.Hash, shortHash) {
+						matched = revision
+						matches += 1
+					}
+				}
+
+				if matches == 0 {
+					http.NotFound(w, r)
+					return
+				}
+
+				if matches > 1 {
+					http.Error(w, "Short SHA collision detected; unable to show commit.", http.StatusConflict)
+					return
+				}
+
+				hash, err := repo.ResolveRevision(plumbing.Revision(matched.Hash))
+				if err != nil {
+					log.Println("Could not resolve revision:", err)
+					return
+				}
+
+				commit, err := repo.CommitObject(*hash)
+				if err != nil {
+					log.Println("Could not load commit:", err)
+					return
+				}
+
+				renderCommit(matched.Path, commit)
 				return
 			}
 
@@ -172,21 +270,7 @@ func main() {
 
 		entry := entries[0]
 
-		file, err := readFileAtCommit(commit, entry.SourcePath)
-		if err != nil {
-			log.Println("Could not read story:", err)
-			http.Error(w, "Could not read story", http.StatusInternalServerError)
-			return
-		}
-
-		story := parseStory(file, entry.SourcePath)
-		storyRendered, err := renderStory(story)
-		if err != nil {
-			http.Error(w, "Could not render story", http.StatusInternalServerError)
-			return
-		}
-
-		renderTemplate(w, storyTemplate, storyRendered)
+		renderCommit(entry.SourcePath, headCommit)
 	})
 
 	log.Println("Listening at http://localhost:8080")
