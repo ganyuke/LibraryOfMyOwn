@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html>
+    <h1>Stories</h1>
+    <ul>
+        {{range .}}
+        <li>{{.SourcePath}} <a href="/stories/{{.Slug}}">{{.Title}}</a> <p>{{.Author}}</p> <p>{{.WordCount}}</p> <p>{{FormatSimpleDate .LastUpdated}}</p></li>
+        {{end}}
+    </ul>
+</html>

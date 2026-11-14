@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+    <h1>History</h1>
+    <div>
+        <ul>
+            {{range .}}
+                <li>{{.CommitHash}} {{.Author}} {{FormatTimestamp .Date}} {{.Path}}</li>
+            {{end}}
+        </ul>
+    </div>
+</html>

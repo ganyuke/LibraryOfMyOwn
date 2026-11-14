@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+    <h1>{{.Metadata.Title}}</h1>
+    <div>
+        <h2>
+            Frontmatter
+        </h2>
+        <div>
+            <ul>
+                {{range .Metadata.Frontmatter}}
+                <li><b>{{.Field}}</b>: {{.Value}}</li>
+                {{end}}
+
+                <li>
+                    <h3>Character List</h3>
+                    <ul>
+                        {{range .Metadata.CharacterList}}
+                        <li><b>{{.Field}}</b>: {{.Value}}</li>
+                        {{end}}
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <hl>
+    <div>
+
+    </div>
+    <div>
+        {{.Body}}
+    </div>
+</html>
