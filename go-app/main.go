@@ -24,6 +24,10 @@ func main() {
 	mux := http.NewServeMux()
 	templ := makeTemplates()
 	repo := loadRepo("../examples/private/")
+	err = deployPostRecieveHook(repo.RepositoryPath)
+	if err != nil {
+		log.Println("warning: degraded functionality; failed to write post-recieve hook:", err)
+	}
 	snapshot, snapshotErr := makeSnapshot(repo)
 
 	var antiRefreshMutex sync.RWMutex

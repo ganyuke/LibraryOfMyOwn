@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
@@ -269,4 +271,71 @@ func onPush(repo Repository) (Repository, Snapshot, error) {
 	}
 
 	return repo, snapshot, nil
+}
+
+func findPostReceivePath(repoPath string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--git-path", "hooks/post-receive")
+	cmd.Dir = repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to locate post-receive hook path: %w", err)
+	}
+
+	path := strings.TrimSuffix(string(output), "\n")
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(repoPath, path)
+	}
+
+	return path, nil
+}
+
+// find hook path, copy script into git repo hooks,
+// if there is a file there compare checksums and complain about it
+func deployPostRecieveHook(repoPath string) error {
+	hookPath, err := findPostReceivePath(repoPath)
+	if err != nil {
+		return err
+	}
+
+	script, err := os.ReadFile("../examples/git/refresh-hook.sh")
+	if err != nil {
+		return fmt.Errorf("failed to read sample refresh hook: %w", err)
+	}
+
+	installed, err := os.ReadFile(hookPath)
+
+	if err == nil {
+		if !bytes.Equal(installed, script) {
+			return fmt.Errorf("post-receive hook already exists and isn't ours: %s", hookPath)
+		} else {
+			if err := os.Chmod(hookPath, 0755); err != nil {
+				return fmt.Errorf("failed to mark post-receive hook executable: %w", err)
+			}
+		}
+
+		return nil
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to read post-recieve hook: %w", err)
+	}
+
+	hook, err := os.OpenFile(hookPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create post-receive hook: %w", err)
+	}
+	defer hook.Close()
+
+	if _, err := hook.Write(script); err != nil {
+		return fmt.Errorf("failed to write post-receive hook: %w", err)
+	}
+
+	// double checking that it worked
+	if err := hook.Chmod(0755); err != nil {
+		return fmt.Errorf("failed to mark new post-receive hook executable: %w", err)
+	}
+
+	return nil
+
 }
