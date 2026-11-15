@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -11,6 +13,21 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
+
+type Snapshot struct {
+	Commit     *object.Commit
+	Index      []StoryIndexEntry
+	History    RevisionHistory
+	IndexSlugs map[string][]StoryIndexEntry
+}
+
+type Repository struct {
+	RepositoryPath   string
+	RepositoryRoot   *os.Root
+	Repository       *git.Repository
+	HeadCommit       *object.Commit
+	CurrentFilePaths []string
+}
 
 type FileRevision struct {
 	Hash         string
@@ -160,4 +177,96 @@ func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (Re
 	}
 
 	return revisionList, nil
+}
+
+func loadRepo(repoPath string) Repository {
+	repoRoot, err := os.OpenRoot(repoPath)
+	if err != nil {
+		log.Fatal("Could not open stories directory:", err)
+	}
+
+	repo, err := openRepository(repoPath)
+	if err != nil {
+		log.Fatal("Could not open stories repository:", err)
+	}
+
+	headCommit, err := getHeadCommit(repo)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	files, err := listFilesPathsAtCommit(headCommit)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	return Repository{
+		RepositoryPath:   repoPath,
+		RepositoryRoot:   repoRoot,
+		Repository:       repo,
+		HeadCommit:       headCommit,
+		CurrentFilePaths: files,
+	}
+}
+
+func refreshRepo(repo Repository) Repository {
+	headCommit, err := getHeadCommit(repo.Repository)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	files, err := listFilesPathsAtCommit(headCommit)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	return Repository{
+		RepositoryPath:   repo.RepositoryPath,
+		RepositoryRoot:   repo.RepositoryRoot,
+		Repository:       repo.Repository,
+		HeadCommit:       headCommit,
+		CurrentFilePaths: files,
+	}
+}
+
+func makeSnapshot(repo Repository) (Snapshot, error) {
+	history, err := walkHistoryInRepo(repo)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("failed to walk history: %w", err)
+	}
+
+	storyIndex, err := buildStoryIndex(repo.HeadCommit, history)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("failed to build index: %w", err)
+	}
+
+	// slice so we can store collided names for
+	// notice in the admin UI
+	indexSlugs := make(map[string][]StoryIndexEntry)
+
+	for _, story := range storyIndex {
+		existing, found := indexSlugs[story.Slug]
+		if found {
+			log.Println("slug collision detected on:", existing[0].SourcePath, "for", story.SourcePath)
+		}
+
+		indexSlugs[story.Slug] = append(indexSlugs[story.Slug], story)
+	}
+
+	return Snapshot{
+		Commit:     repo.HeadCommit,
+		Index:      storyIndex,
+		History:    history,
+		IndexSlugs: indexSlugs,
+	}, nil
+}
+
+func onPush(repo Repository) (Repository, Snapshot, error) {
+	repo = refreshRepo(repo)
+	snapshot, err := makeSnapshot(repo)
+	if err != nil {
+		return Repository{}, Snapshot{}, err
+	}
+
+	return repo, snapshot, nil
 }
