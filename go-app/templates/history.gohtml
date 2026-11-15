@@ -4,7 +4,7 @@
     <div>
         <ul>
             {{range .Revisions}}
-                <li><a href="/stories/{{$.Entry.Slug}}/r/{{ShortHash .Hash}}">{{ShortHash .Hash}}</a> {{.Author}} {{FormatTimestamp .Date}} {{.Path}}</li>
+                <li><a href="/stories/{{$.Entry.Slug}}/r/{{ShortHash .Hash}}">{{ShortHash .Hash}}</a> {{.Author}} {{FormatTimestamp .Date}} {{.OldPath}} - {{.Summary}}</li>
             {{end}}
         </ul>
     </div>

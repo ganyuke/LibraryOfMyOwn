@@ -95,7 +95,11 @@ func TestHistoryAfterPathReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	history, err := walkHistory(repo, head)
+	paths, err := listFilesPathsAtCommit(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := walkHistoryAtCommit(dir, head.Hash.String(), paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +250,11 @@ func TestHistoryAfterMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	history, err := walkHistory(repo, head)
+	paths, err := listFilesPathsAtCommit(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := walkHistoryAtCommit(dir, head.Hash.String(), paths)
 	if err != nil {
 		t.Fatal(err)
 	}

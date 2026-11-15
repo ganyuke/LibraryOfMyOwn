@@ -99,7 +99,12 @@ func main() {
 		log.Fatal("Could not resolve stories HEAD:", err)
 	}
 
-	history, err := walkHistory(repo, headCommit)
+	files, err := listFilesPathsAtCommit(headCommit)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	history, err := walkHistoryAtCommit(storyRoot, headCommit.Hash.String(), files)
 	if err != nil {
 		log.Fatal("Could not walk history:", err)
 	}
@@ -228,7 +233,7 @@ func main() {
 					return
 				}
 
-				renderCommit(matched.Path, commit)
+				renderCommit(matched.OldPath, commit)
 				return
 			}
 

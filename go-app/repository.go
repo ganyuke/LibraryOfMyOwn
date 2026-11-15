@@ -1,8 +1,11 @@
 package main
 
 import (
-	"context"
+	"bytes"
+	"fmt"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
@@ -10,10 +13,13 @@ import (
 )
 
 type FileRevision struct {
-	Hash   string
-	Author string
-	Date   time.Time
-	Path   string
+	Hash         string
+	Date         time.Time
+	Author       string
+	Summary      string
+	RenameStatus string
+	OldPath      string
+	NewPath      string
 }
 
 type RevisionHistory = map[string][]FileRevision
@@ -67,126 +73,87 @@ func readFileAtCommit(commit *object.Commit, path string) ([]byte, error) {
 	return []byte(content), nil
 }
 
-// for each commit in branch history:
-//    find paths changed by this commit
-//    for each changed story:
-//        add this commit to that story's history
-// for each file
-// 	  find earliest recorded commit
-//    set file author as earliest commit's author
-//    set file update date as latest commit's update date
-
-func walkHistory(repo *git.Repository, head *object.Commit) (RevisionHistory, error) {
+func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (RevisionHistory, error) {
 	revisionList := make(RevisionHistory)
-	tracked := make(map[string]string)
-
-	commits, err := repo.Log(&git.LogOptions{
-		From: head.Hash,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer commits.Close()
-
-	paths, err := listFilesPathsAtCommit(head)
-	if err != nil {
-		return nil, err
-	}
 
 	for _, path := range paths {
-		tracked[path] = path
-	}
-
-	err = commits.ForEach(func(commit *object.Commit) error {
-		// root commit
-		if commit.NumParents() == 0 {
-			files, err := listFilesPathsAtCommit(commit)
-			if err != nil {
-				return err
-			}
-
-			for _, path := range files {
-				currentPath, found := tracked[path]
-				if !found {
-					continue
-				}
-
-				revisionList[currentPath] = append(revisionList[currentPath], FileRevision{
-					Hash:   commit.Hash.String(),
-					Author: commit.Author.Name,
-					Date:   commit.Committer.When,
-					Path:   path,
-				})
-			}
-
-			return nil
-		}
-
-		parent, err := commit.Parent(0)
-		if err != nil {
-			return err
-		}
-
-		parentTree, err := parent.Tree()
-		if err != nil {
-			return err
-		}
-
-		currentTree, err := commit.Tree()
-		if err != nil {
-			return err
-		}
-
-		changes, err := object.DiffTreeWithOptions(
-			context.Background(),
-			parentTree,
-			currentTree,
-			object.DefaultDiffTreeOptions,
+		// apparently Gitea just shells out to git log --follow
+		// and go-git itself doesn't support that directly out-of-the-box
+		// and I'm a lazy bum so I'll just do what Gitea does
+		command := exec.Command(
+			"git", "--no-pager", "log",
+			"--follow",
+			"-z",
+			"--format=%x00%H%x00%ct%x00%an%x00%s",
+			"--name-status",
+			commitHash,
+			"--",
+			path,
 		)
+		command.Dir = repoPath
+
+		output, err := command.Output()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		for _, change := range changes {
-			// "" -> to - file creation
-			// from -> to - file modification
-			// from -> "" - file deletion
-			oldPath := change.From.Name
-			newPath := change.To.Name
-			if newPath == "" {
-				continue
+		// git log output format:
+		// 0 empty field
+		// 1 commit hash
+		// 2 commit date (in Unix seconds)
+		// 3 author
+		// 4 commit message summary
+		// 5 commit status (R, C, A etc. beginning with \n)
+		// 6 old path
+		// 7 new path (optionally) / 7 empty field (next record)
+		// 8 (if 7 exists) empty field (next record)
+		parts := bytes.Split(output, []byte{0})
+
+		for i := 0; i < len(parts)-1; i += 7 {
+			if i+7 >= len(parts) {
+				return nil, fmt.Errorf("incomplete git history record for %q", path)
 			}
 
-			currentPath, trackedFile := tracked[change.To.Name]
-			if !trackedFile {
-				continue
+			hash := parts[i+1]
+			timestamp := parts[i+2]
+			author := parts[i+3]
+			commitSummary := parts[i+4]
+			commitStatus := parts[i+5]
+			oldPath := parts[i+6]
+			newPath := parts[i+7]
+
+			commitStatus = bytes.TrimSpace(commitStatus) // strip the newline
+
+			if len(newPath) != 0 {
+				i++
 			}
 
-			switch {
-			case oldPath == "":
-				// found file's original file path
-				// stop tracking the history for this file
-				delete(tracked, newPath)
-
-			case oldPath != newPath:
-				// add to the HEAD's current path
-				delete(tracked, newPath)
-				tracked[oldPath] = currentPath
+			unix, err := strconv.ParseInt(string(timestamp), 10, 64)
+			if err != nil {
+				return nil, err
 			}
+			t := time.Unix(unix, 0)
 
-			revisionList[currentPath] = append(revisionList[currentPath], FileRevision{
-				Hash:   commit.Hash.String(),
-				Author: commit.Author.Name,
-				Date:   commit.Committer.When,
-				Path:   newPath,
+			revisionList[path] = append(revisionList[path], FileRevision{
+				Hash:         string(hash),
+				Date:         t,
+				Author:       string(author),
+				Summary:      string(commitSummary),
+				RenameStatus: string(commitStatus),
+				OldPath:      string(oldPath),
+				NewPath:      string(newPath),
 			})
-		}
 
-		return nil
-	})
-	if err != nil {
-		return nil, err
+			// stop looking for revisions past the file's creation commit
+			// reasoning: shouldn't expose the history of previously files
+			// on that path, which git log will do if we don't stop it
+			// scenario: you use draft.txt for your stories and delete it after
+			// you make it into a real story and you don't want to expose that
+			if bytes.Equal(commitStatus, []byte("A")) {
+				break
+			}
+		}
 	}
 
-	return revisionList, err
+	return revisionList, nil
 }
