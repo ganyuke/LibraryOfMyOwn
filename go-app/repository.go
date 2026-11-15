@@ -24,11 +24,12 @@ type Snapshot struct {
 }
 
 type Repository struct {
-	RepositoryPath   string
-	RepositoryRoot   *os.Root
-	Repository       *git.Repository
-	HeadCommit       *object.Commit
-	CurrentFilePaths []string
+	AbsoluteRepositoryPath string
+	RepositoryPath         string
+	RepositoryRoot         *os.Root
+	Repository             *git.Repository
+	HeadCommit             *object.Commit
+	CurrentFilePaths       []string
 }
 
 type FileRevision struct {
@@ -182,6 +183,11 @@ func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (Re
 }
 
 func loadRepo(repoPath string) Repository {
+	absolutePath, err := filepath.Abs(repoPath)
+	if err != nil {
+		log.Fatal("could not resolve absolute repository path:", err)
+	}
+
 	repoRoot, err := os.OpenRoot(repoPath)
 	if err != nil {
 		log.Fatal("Could not open stories directory:", err)
@@ -203,11 +209,12 @@ func loadRepo(repoPath string) Repository {
 	}
 
 	return Repository{
-		RepositoryPath:   repoPath,
-		RepositoryRoot:   repoRoot,
-		Repository:       repo,
-		HeadCommit:       headCommit,
-		CurrentFilePaths: files,
+		AbsoluteRepositoryPath: absolutePath,
+		RepositoryPath:         repoPath,
+		RepositoryRoot:         repoRoot,
+		Repository:             repo,
+		HeadCommit:             headCommit,
+		CurrentFilePaths:       files,
 	}
 }
 
@@ -223,11 +230,12 @@ func refreshRepo(repo Repository) Repository {
 	}
 
 	return Repository{
-		RepositoryPath:   repo.RepositoryPath,
-		RepositoryRoot:   repo.RepositoryRoot,
-		Repository:       repo.Repository,
-		HeadCommit:       headCommit,
-		CurrentFilePaths: files,
+		AbsoluteRepositoryPath: repo.AbsoluteRepositoryPath,
+		RepositoryPath:         repo.RepositoryPath,
+		RepositoryRoot:         repo.RepositoryRoot,
+		Repository:             repo.Repository,
+		HeadCommit:             headCommit,
+		CurrentFilePaths:       files,
 	}
 }
 
@@ -273,13 +281,13 @@ func onPush(repo Repository) (Repository, Snapshot, error) {
 	return repo, snapshot, nil
 }
 
-func findPostReceivePath(repoPath string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--git-path", "hooks/post-receive")
+func findGitInternalFilePath(repoPath string, file string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--git-path", file)
 	cmd.Dir = repoPath
 
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to locate post-receive hook path: %w", err)
+		return "", fmt.Errorf("failed to locate %s path: %w", file, err)
 	}
 
 	path := strings.TrimSuffix(string(output), "\n")
@@ -288,6 +296,14 @@ func findPostReceivePath(repoPath string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func findPostReceivePath(repoPath string) (string, error) {
+	return findGitInternalFilePath(repoPath, "hooks/post-receive")
+}
+
+func findGitDaemonExportOkPath(repoPath string) (string, error) {
+	return findGitInternalFilePath(repoPath, "git-daemon-export-ok")
 }
 
 // find hook path, copy script into git repo hooks,
@@ -337,5 +353,32 @@ func deployPostRecieveHook(repoPath string) error {
 	}
 
 	return nil
+}
 
+func findGitHttpBackendPath() (string, error) {
+	output, err := exec.Command("git", "--exec-path").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to locate git exec path: %w", err)
+	}
+
+	dir := strings.TrimSuffix(string(output), "\n")
+	return filepath.Join(dir, "git-http-backend"), nil
+}
+
+func deployDaemonExportOk(repoPath string) error {
+	exportPath, err := findGitDaemonExportOkPath(repoPath)
+	if err != nil {
+		return err
+	}
+
+	// touch the daemon file if it doesn't exist yet
+	file, err := os.OpenFile(exportPath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to touch git-daemon-export-ok: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("failed to close git-daemon-export-ok: %w", err)
+	}
+
+	return nil
 }

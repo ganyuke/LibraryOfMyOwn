@@ -4,6 +4,8 @@ import (
 	"crypto/subtle"
 	"log"
 	"net/http"
+	"net/http/cgi"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -24,10 +26,60 @@ func main() {
 	mux := http.NewServeMux()
 	templ := makeTemplates()
 	repo := loadRepo("../examples/private/")
+	repoName := filepath.Base(repo.AbsoluteRepositoryPath)
+
+	err = deployDaemonExportOk(repo.RepositoryPath)
+	if err != nil {
+		log.Fatal("failed to create git-daemon-export-ok; unable to serve push functionality for repository:", err)
+	}
+
 	err = deployPostRecieveHook(repo.RepositoryPath)
 	if err != nil {
 		log.Println("warning: degraded functionality; failed to write post-recieve hook:", err)
 	}
+
+	backendPath, err := findGitHttpBackendPath()
+	if err != nil {
+		log.Fatal("failed to locate git-http-backend:", err)
+	}
+
+	gitBackend := &cgi.Handler{
+		Path: backendPath,
+		Env: []string{
+			"GIT_PROJECT_ROOT=" + filepath.Dir(repo.AbsoluteRepositoryPath),
+			"GIT_HOOK_SECRET=" + secrets.SystemHookPush,
+			"REMOTE_USER=mina_ha",
+		},
+	}
+
+	gitHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+
+		if !ok || username != "git" || !VerifySecret(password, secrets.GitPassword) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Git"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		suffix := strings.TrimPrefix(r.URL.Path, "/stories.git")
+
+		switch {
+		case r.Method == http.MethodGet && suffix == "/info/refs":
+		case r.Method == http.MethodPost && suffix == "/git-upload-pack":
+		case r.Method == http.MethodPost && suffix == "/git-receive-pack":
+		default:
+			http.NotFound(w, r)
+			return
+		}
+
+		// create and edit a copy of the original request
+		gitRequest := r.Clone(r.Context())
+		gitRequest.URL.Path = "/" + repoName + suffix
+		gitRequest.URL.RawPath = ""
+
+		gitBackend.ServeHTTP(w, gitRequest)
+	})
+
 	snapshot, snapshotErr := makeSnapshot(repo)
 
 	var antiRefreshMutex sync.RWMutex
@@ -226,6 +278,8 @@ func main() {
 			w.WriteHeader(http.StatusNoContent)
 		},
 	)
+
+	mux.Handle("/stories.git/", gitHandler)
 
 	log.Println("Listening at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
