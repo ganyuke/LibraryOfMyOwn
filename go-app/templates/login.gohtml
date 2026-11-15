@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Log in</title>
+    </head>
+    <body>
+        <h1>Log in</h1>
+
+        {{if .Error}}
+        <p class="error">{{.Error}}</p>
+        {{end}}
+
+        <form method="POST" action="/login">
+            <label for="password">Admin password</label>
+            <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autofocus
+                autocomplete="current-password"
+            />
+            <button type="submit">Log in</button>
+        </form>
+    </body>
+</html>

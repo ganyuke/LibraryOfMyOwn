@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/cgi"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -18,12 +20,17 @@ type HistoryPageData struct {
 	Revisions []FileRevision
 }
 
+type LoginPageData struct {
+	Error string
+}
+
 func main() {
 	secrets, err := generateSecrets()
 	if err != nil {
 		log.Fatal("failed to generate/read secrets.txt: %w", err)
 	}
 	mux := http.NewServeMux()
+	sessions := scs.New()
 	templ := makeTemplates()
 	repo := loadRepo("../examples/private/")
 	repoName := filepath.Base(repo.AbsoluteRepositoryPath)
@@ -98,7 +105,7 @@ func main() {
 			return
 		}
 
-		renderTemplate(w, templ.Index, currentSnapshot.Index)
+		renderTemplate(w, templ.Index, http.StatusOK, currentSnapshot.Index)
 	})
 
 	// wildcard stories routes
@@ -135,7 +142,7 @@ func main() {
 				return
 			}
 
-			renderTemplate(w, templ.Story, storyRendered)
+			renderTemplate(w, templ.Story, http.StatusOK, storyRendered)
 		}
 
 		if !found {
@@ -158,7 +165,7 @@ func main() {
 					Revisions: entryHistory,
 				}
 
-				renderTemplate(w, templ.History, historyPgData)
+				renderTemplate(w, templ.History, http.StatusOK, historyPgData)
 				return
 			}
 
@@ -281,7 +288,64 @@ func main() {
 
 	mux.Handle("/stories.git/", gitHandler)
 
-	log.Println("Listening at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
+		if !sessions.GetBool(r.Context(), "authenticated") {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
 
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `
+			<p>Welcome, admin!</p>
+			<form method="POST" action="/logout">
+				<button type="submit">Log out</button>
+			</form>
+		`)
+	})
+
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		if sessions.GetBool(r.Context(), "authenticated") {
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			return
+		}
+
+		renderTemplate(w, templ.Login, http.StatusOK, LoginPageData{})
+	})
+
+	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
+		password := r.PostFormValue("password")
+
+		if !VerifySecret(password, secrets.AdministratorPassword) {
+			log.Println("rejected login attempt on endpoint /login")
+			renderTemplate(w, templ.Login, http.StatusUnauthorized, LoginPageData{
+				Error: "Your password is wrong.",
+			})
+			return
+		}
+
+		if err := sessions.RenewToken(r.Context()); err != nil {
+			log.Println("failed to renew session:", err)
+			http.Error(w, "Could not create session", http.StatusInternalServerError)
+			return
+		}
+
+		sessions.Put(r.Context(), "authenticated", true)
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	})
+
+	mux.HandleFunc("POST /logout", func(w http.ResponseWriter, r *http.Request) {
+		if err := sessions.Destroy(r.Context()); err != nil {
+			log.Println("failed to destroy session:", err)
+			http.Error(w, "Could not log out", http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	})
+
+	csrfProtection := http.NewCrossOriginProtection()
+
+	log.Println("Listening at http://localhost:8080")
+	handler := sessions.LoadAndSave(csrfProtection.Handler(mux))
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
