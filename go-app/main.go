@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -9,13 +10,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+type Snapshot struct {
+	Commit     *object.Commit
+	Index      []StoryIndexEntry
+	History    RevisionHistory
+	IndexSlugs map[string][]StoryIndexEntry
+}
+
+type Repository struct {
+	RepositoryPath   string
+	RepositoryRoot   *os.Root
+	Repository       *git.Repository
+	HeadCommit       *object.Commit
+	CurrentFilePaths []string
+}
+
 type HistoryPageData struct {
 	Entry     StoryIndexEntry
 	Revisions []FileRevision
+}
+
+type Templates struct {
+	Index   *template.Template
+	Story   *template.Template
+	History *template.Template
 }
 
 // mediawiki style date
@@ -67,16 +90,7 @@ func renderTemplate(w http.ResponseWriter, templ *template.Template, data any) e
 	return nil
 }
 
-func main() {
-	mux := http.NewServeMux()
-
-	storyRoot := "../examples/private/"
-	storyDir, err := os.OpenRoot(storyRoot)
-	if err != nil {
-		log.Fatal("Could not open stories directory:", err)
-	}
-	defer storyDir.Close()
-
+func makeTemplates() Templates {
 	funcs := template.FuncMap{
 		"FormatTimestamp":  FormatTimestamp,
 		"FormatSimpleDate": FormatSimpleDate,
@@ -85,11 +99,20 @@ func main() {
 		},
 	}
 
-	indexTemplate := template.Must(template.New("index.gohtml").Funcs(funcs).ParseFiles("templates/index.gohtml"))
-	storyTemplate := template.Must(template.New("story.gohtml").Funcs(funcs).ParseFiles("templates/story.gohtml"))
-	historyTemplate := template.Must(template.New("history.gohtml").Funcs(funcs).ParseFiles("templates/history.gohtml"))
+	return Templates{
+		Index:   template.Must(template.New("index.gohtml").Funcs(funcs).ParseFiles("templates/index.gohtml")),
+		Story:   template.Must(template.New("story.gohtml").Funcs(funcs).ParseFiles("templates/story.gohtml")),
+		History: template.Must(template.New("history.gohtml").Funcs(funcs).ParseFiles("templates/history.gohtml")),
+	}
+}
 
-	repo, err := openRepository(storyRoot)
+func loadRepo(repoPath string) Repository {
+	repoRoot, err := os.OpenRoot(repoPath)
+	if err != nil {
+		log.Fatal("Could not open stories directory:", err)
+	}
+
+	repo, err := openRepository(repoPath)
 	if err != nil {
 		log.Fatal("Could not open stories repository:", err)
 	}
@@ -104,14 +127,24 @@ func main() {
 		log.Fatal("Could not resolve stories HEAD:", err)
 	}
 
-	history, err := walkHistoryAtCommit(storyRoot, headCommit.Hash.String(), files)
+	return Repository{
+		RepositoryPath:   repoPath,
+		RepositoryRoot:   repoRoot,
+		Repository:       repo,
+		HeadCommit:       headCommit,
+		CurrentFilePaths: files,
+	}
+}
+
+func makeSnapshot(repo Repository) (Snapshot, error) {
+	history, err := walkHistoryInRepo(repo)
 	if err != nil {
-		log.Fatal("Could not walk history:", err)
+		return Snapshot{}, fmt.Errorf("failed to walk history: %w", err)
 	}
 
-	storyIndex, err := buildStoryIndex(headCommit, history)
+	storyIndex, err := buildStoryIndex(repo.HeadCommit, history)
 	if err != nil {
-		log.Fatal("Could not build story index:", err)
+		return Snapshot{}, fmt.Errorf("failed to build index: %w", err)
 	}
 
 	// slice so we can store collided names for
@@ -121,30 +154,49 @@ func main() {
 	for _, story := range storyIndex {
 		existing, found := indexSlugs[story.Slug]
 		if found {
-			log.Println("Slug collision detected on:", existing[0].SourcePath, "for", story.SourcePath)
+			log.Println("slug collision detected on:", existing[0].SourcePath, "for", story.SourcePath)
 		}
 
 		indexSlugs[story.Slug] = append(indexSlugs[story.Slug], story)
 	}
 
+	return Snapshot{
+		Commit:     repo.HeadCommit,
+		Index:      storyIndex,
+		History:    history,
+		IndexSlugs: indexSlugs,
+	}, nil
+}
+
+func main() {
+	mux := http.NewServeMux()
+	templ := makeTemplates()
+	repo := loadRepo("../examples/private/")
+	snapshot, err := makeSnapshot(repo)
+
+	// root index route (/)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
-			http.Error(w, "Could not read the stories directly", http.StatusInternalServerError)
+			log.Println("failed to start web service:", err)
+			http.Error(w, "Failed to start web service. See logs for details.", http.StatusInternalServerError)
 			return
 		}
 
-		renderTemplate(w, indexTemplate, storyIndex)
+		renderTemplate(w, templ.Index, snapshot.Index)
 	})
 
+	// wildcard stories routes
+	// /stories /stories/X/history /stories/X/r/Y
 	mux.HandleFunc("GET /stories/{path...}", func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
-			http.Error(w, "Could not read the stories directly", http.StatusInternalServerError)
+			log.Println("failed to start web service:", err)
+			http.Error(w, "Failed to start web service. See logs for details.", http.StatusInternalServerError)
 			return
 		}
 
 		path := r.PathValue("path")
 
-		entries, found := indexSlugs[path]
+		entries, found := snapshot.IndexSlugs[path]
 
 		renderCommit := func(src string, commit *object.Commit) {
 			file, err := readFileAtCommit(commit, src)
@@ -161,7 +213,7 @@ func main() {
 				return
 			}
 
-			renderTemplate(w, storyTemplate, storyRendered)
+			renderTemplate(w, templ.Story, storyRendered)
 		}
 
 		if !found {
@@ -169,7 +221,7 @@ func main() {
 			pathSplit := strings.Split(path, "/")
 			if pathSplit[len(pathSplit)-1] == "history" {
 				truncatedPath := path[:len(path)-len("/history")]
-				entries, found := indexSlugs[truncatedPath]
+				entries, found := snapshot.IndexSlugs[truncatedPath]
 
 				if !found {
 					http.NotFound(w, r)
@@ -177,21 +229,21 @@ func main() {
 				}
 
 				entry := entries[0]
-				entryHistory := history[entry.SourcePath]
+				entryHistory := snapshot.History[entry.SourcePath]
 
 				historyPgData := HistoryPageData{
 					Entry:     entry,
 					Revisions: entryHistory,
 				}
 
-				renderTemplate(w, historyTemplate, historyPgData)
+				renderTemplate(w, templ.History, historyPgData)
 				return
 			}
 
 			shortHash := pathSplit[len(pathSplit)-1]
 			if len(pathSplit) >= 2 && pathSplit[len(pathSplit)-2] == "r" && isShortSha(shortHash) {
 				truncatedPath := path[:len(path)-len("/r/")-7]
-				entries, found := indexSlugs[truncatedPath]
+				entries, found := snapshot.IndexSlugs[truncatedPath]
 
 				if !found {
 					http.NotFound(w, r)
@@ -199,7 +251,7 @@ func main() {
 				}
 
 				entry := entries[0]
-				entryHistory := history[entry.SourcePath]
+				entryHistory := snapshot.History[entry.SourcePath]
 
 				var matched FileRevision
 				matches := 0
@@ -221,13 +273,13 @@ func main() {
 					return
 				}
 
-				hash, err := repo.ResolveRevision(plumbing.Revision(matched.Hash))
+				hash, err := repo.Repository.ResolveRevision(plumbing.Revision(matched.Hash))
 				if err != nil {
 					log.Println("Could not resolve revision:", err)
 					return
 				}
 
-				commit, err := repo.CommitObject(*hash)
+				commit, err := repo.Repository.CommitObject(*hash)
 				if err != nil {
 					log.Println("Could not load commit:", err)
 					return
@@ -244,7 +296,7 @@ func main() {
 
 		entry := entries[0]
 
-		renderCommit(entry.SourcePath, headCommit)
+		renderCommit(entry.SourcePath, repo.HeadCommit)
 	})
 
 	log.Println("Listening at http://localhost:8080")

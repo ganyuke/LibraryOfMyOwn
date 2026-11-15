@@ -73,6 +73,10 @@ func readFileAtCommit(commit *object.Commit, path string) ([]byte, error) {
 	return []byte(content), nil
 }
 
+func walkHistoryInRepo(repo Repository) (RevisionHistory, error) {
+	return walkHistoryAtCommit(repo.RepositoryPath, repo.HeadCommit.Hash.String(), repo.CurrentFilePaths)
+}
+
 func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (RevisionHistory, error) {
 	revisionList := make(RevisionHistory)
 
