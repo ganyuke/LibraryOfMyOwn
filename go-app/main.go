@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/subtle"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -136,6 +140,26 @@ func loadRepo(repoPath string) Repository {
 	}
 }
 
+func refreshRepo(repo Repository) Repository {
+	headCommit, err := getHeadCommit(repo.Repository)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	files, err := listFilesPathsAtCommit(headCommit)
+	if err != nil {
+		log.Fatal("Could not resolve stories HEAD:", err)
+	}
+
+	return Repository{
+		RepositoryPath:   repo.RepositoryPath,
+		RepositoryRoot:   repo.RepositoryRoot,
+		Repository:       repo.Repository,
+		HeadCommit:       headCommit,
+		CurrentFilePaths: files,
+	}
+}
+
 func makeSnapshot(repo Repository) (Snapshot, error) {
 	history, err := walkHistoryInRepo(repo)
 	if err != nil {
@@ -168,7 +192,88 @@ func makeSnapshot(repo Repository) (Snapshot, error) {
 	}, nil
 }
 
+func onPush(repo Repository) (Repository, Snapshot, error) {
+	repo = refreshRepo(repo)
+	snapshot, err := makeSnapshot(repo)
+	if err != nil {
+		return Repository{}, Snapshot{}, err
+	}
+
+	return repo, snapshot, nil
+}
+
+type Secrets struct {
+	SystemHookPush        string
+	AdministratorPassword string
+	GitPassword           string
+}
+
+func generateSecrets() (Secrets, error) {
+	secrets, err := os.OpenFile("secrets.txt", os.O_RDONLY, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		// generate new secrets
+		hook, admin, git := rand.Text(), rand.Text(), rand.Text()
+
+		adminHash, err := HashSecret(admin)
+		if err != nil {
+			return Secrets{}, fmt.Errorf("failed to hash admin password: %w", err)
+		}
+
+		gitHash, err := HashSecret(git)
+		if err != nil {
+			return Secrets{}, fmt.Errorf("failed to hash git password: %w", err)
+		}
+
+		err = os.WriteFile("secrets.txt", []byte(strings.Join([]string{hook, adminHash, gitHash}, "\n")), 0600)
+		if err != nil {
+			return Secrets{}, fmt.Errorf("failed to write secrets.txt: %w", err)
+		}
+
+		log.Println("---- START OF GENERATED SECRETS ----")
+		log.Println("Admin password:", admin)
+		log.Println("Git password:", git)
+		log.Println("---- END OF GENERATED SECRETS ----")
+		log.Println("Make sure you CHANGE these when you log in and SAVE them into your password manager! They will not be shown again!")
+
+		return Secrets{
+			SystemHookPush:        hook,
+			AdministratorPassword: adminHash,
+			GitPassword:           gitHash,
+		}, nil
+	} else if err != nil {
+		// could not read file for some reason
+		return Secrets{}, fmt.Errorf("failed to open/create secrest file: %w", err)
+	} else {
+		// normal operation
+		defer secrets.Close()
+
+		content, err := io.ReadAll(secrets)
+		if err != nil {
+			return Secrets{}, fmt.Errorf("failed to read secrets file: %w", err)
+		}
+
+		lines := bytes.Split(content, []byte("\n"))
+		lineCount := len(lines)
+		if lineCount != 3 {
+			return Secrets{}, fmt.Errorf(
+				"malformed secrets file: expected 3 lines of secrets, got %d",
+				lineCount,
+			)
+		}
+
+		return Secrets{
+			SystemHookPush:        string(lines[0]),
+			AdministratorPassword: string(lines[1]),
+			GitPassword:           string(lines[2]),
+		}, nil
+	}
+}
+
 func main() {
+	secrets, err := generateSecrets()
+	if err != nil {
+		log.Fatal("failed to generate/read secrets.txt: %w", err)
+	}
 	mux := http.NewServeMux()
 	templ := makeTemplates()
 	repo := loadRepo("../examples/private/")
@@ -298,6 +403,45 @@ func main() {
 
 		renderCommit(entry.SourcePath, repo.HeadCommit)
 	})
+
+	mux.HandleFunc("POST /internal/kaboom",
+		func(w http.ResponseWriter, r *http.Request) {
+			token, ok := strings.CutPrefix(
+				r.Header.Get("Authorization"),
+				"Bearer ",
+			)
+
+			if !ok || token == "" {
+				log.Println("rejected refresh attempt on endpoint /internal/kaboom")
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			clientType := r.Header.Get("X-Client-Type")
+
+			if clientType != "system" {
+				log.Println("invalid X-Client-Type tried to access endpoint /internal/kaboom: ", clientType)
+				http.Error(w, "invalid client type", 400)
+				return
+			}
+
+			result := subtle.ConstantTimeCompare([]byte(token), []byte(secrets.SystemHookPush))
+			if result == 0 {
+				log.Println("rejected invalid token on endpoint /internal/kaboom")
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			repo, snapshot, err = onPush(repo)
+			if err != nil {
+				log.Println("failed to refresh repository:", err)
+				http.Error(w, "Failed to refresh repository", http.StatusInternalServerError)
+				return
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+		},
+	)
 
 	log.Println("Listening at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
