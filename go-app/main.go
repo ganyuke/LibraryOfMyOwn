@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -23,31 +24,45 @@ func main() {
 	mux := http.NewServeMux()
 	templ := makeTemplates()
 	repo := loadRepo("../examples/private/")
-	snapshot, err := makeSnapshot(repo)
+	snapshot, snapshotErr := makeSnapshot(repo)
+
+	var antiRefreshMutex sync.RWMutex
+	var refreshWriteMutex sync.Mutex
 
 	// root index route (/)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		if err != nil {
-			log.Println("failed to start web service:", err)
+		antiRefreshMutex.RLock()
+		currentSnapshot := snapshot
+		currentSnapshotErr := snapshotErr
+		antiRefreshMutex.RUnlock()
+
+		if currentSnapshotErr != nil {
+			log.Println("failed to start web service:", currentSnapshotErr)
 			http.Error(w, "Failed to start web service. See logs for details.", http.StatusInternalServerError)
 			return
 		}
 
-		renderTemplate(w, templ.Index, snapshot.Index)
+		renderTemplate(w, templ.Index, currentSnapshot.Index)
 	})
 
 	// wildcard stories routes
 	// /stories /stories/X/history /stories/X/r/Y
 	mux.HandleFunc("GET /stories/{path...}", func(w http.ResponseWriter, r *http.Request) {
-		if err != nil {
-			log.Println("failed to start web service:", err)
+		antiRefreshMutex.RLock()
+		currentSnapshot := snapshot
+		currentRepo := repo
+		currentSnapshotErr := snapshotErr
+		antiRefreshMutex.RUnlock()
+
+		if currentSnapshotErr != nil {
+			log.Println("failed to start web service:", currentSnapshotErr)
 			http.Error(w, "Failed to start web service. See logs for details.", http.StatusInternalServerError)
 			return
 		}
 
 		path := r.PathValue("path")
 
-		entries, found := snapshot.IndexSlugs[path]
+		entries, found := currentSnapshot.IndexSlugs[path]
 
 		renderCommit := func(src string, commit *object.Commit) {
 			file, err := readFileAtCommit(commit, src)
@@ -72,7 +87,7 @@ func main() {
 			pathSplit := strings.Split(path, "/")
 			if pathSplit[len(pathSplit)-1] == "history" {
 				truncatedPath := path[:len(path)-len("/history")]
-				entries, found := snapshot.IndexSlugs[truncatedPath]
+				entries, found := currentSnapshot.IndexSlugs[truncatedPath]
 
 				if !found {
 					http.NotFound(w, r)
@@ -80,7 +95,7 @@ func main() {
 				}
 
 				entry := entries[0]
-				entryHistory := snapshot.History[entry.SourcePath]
+				entryHistory := currentSnapshot.History[entry.SourcePath]
 
 				historyPgData := HistoryPageData{
 					Entry:     entry,
@@ -94,7 +109,7 @@ func main() {
 			shortHash := pathSplit[len(pathSplit)-1]
 			if len(pathSplit) >= 2 && pathSplit[len(pathSplit)-2] == "r" && isShortSha(shortHash) {
 				truncatedPath := path[:len(path)-len("/r/")-7]
-				entries, found := snapshot.IndexSlugs[truncatedPath]
+				entries, found := currentSnapshot.IndexSlugs[truncatedPath]
 
 				if !found {
 					http.NotFound(w, r)
@@ -102,7 +117,7 @@ func main() {
 				}
 
 				entry := entries[0]
-				entryHistory := snapshot.History[entry.SourcePath]
+				entryHistory := currentSnapshot.History[entry.SourcePath]
 
 				var matched FileRevision
 				matches := 0
@@ -124,13 +139,13 @@ func main() {
 					return
 				}
 
-				hash, err := repo.Repository.ResolveRevision(plumbing.Revision(matched.Hash))
+				hash, err := currentRepo.Repository.ResolveRevision(plumbing.Revision(matched.Hash))
 				if err != nil {
 					log.Println("Could not resolve revision:", err)
 					return
 				}
 
-				commit, err := repo.Repository.CommitObject(*hash)
+				commit, err := currentRepo.Repository.CommitObject(*hash)
 				if err != nil {
 					log.Println("Could not load commit:", err)
 					return
@@ -147,7 +162,7 @@ func main() {
 
 		entry := entries[0]
 
-		renderCommit(entry.SourcePath, repo.HeadCommit)
+		renderCommit(entry.SourcePath, currentRepo.HeadCommit)
 	})
 
 	mux.HandleFunc("POST /internal/kaboom",
@@ -178,9 +193,28 @@ func main() {
 				return
 			}
 
-			repo, snapshot, err = onPush(repo)
-			if err != nil {
-				log.Println("failed to refresh repository:", err)
+			// prevent refreshing from stepping on each other by serializing
+			refreshWriteMutex.Lock()
+
+			antiRefreshMutex.RLock()
+			currentRepo := repo
+			antiRefreshMutex.RUnlock()
+
+			// no lock on reads yet so we can continue serving
+			// the current snapshot while building the next
+			nRepo, nSnapshot, pushErr := onPush(currentRepo)
+			if pushErr == nil {
+				// acquire write lock while swapping out the old snapshot
+				antiRefreshMutex.Lock()
+				repo = nRepo
+				snapshot = nSnapshot
+				snapshotErr = nil
+				antiRefreshMutex.Unlock()
+			}
+			refreshWriteMutex.Unlock()
+
+			if pushErr != nil {
+				log.Println("failed to refresh repository:", pushErr)
 				http.Error(w, "Failed to refresh repository", http.StatusInternalServerError)
 				return
 			}
