@@ -324,42 +324,41 @@ func main() {
 		currentRepo := repo
 		antiRefreshMutex.RUnlock()
 
-		data, err := makeSitePageData(currentRepo.Repository)
-		if err != nil {
-			log.Println("failed to hydrate page:", err)
-			http.Error(w, "Failed to hydrate page. See logs for details.", http.StatusInternalServerError)
-			return
-		}
-
 		chosenBranch := r.PostFormValue("branch")
 
 		refreshWriteMutex.Lock()
-		err = setPublishedBranch(repo.Repository, chosenBranch)
-		if err != nil {
-			refreshWriteMutex.Unlock()
-			data.Error = "Unable to change branch to " + chosenBranch
-			renderTemplate(w, templ.Site, http.StatusInternalServerError, data)
-			return
-		}
+		branchErr := setPublishedBranch(currentRepo.Repository, chosenBranch)
 
-		err = refreshSnapshot()
+		var refreshErr error
+		if branchErr == nil {
+			refreshErr = refreshSnapshot()
+		}
 		refreshWriteMutex.Unlock()
 
-		if err != nil {
-			log.Println("changed HEAD but snapshot refresh failed:", err)
-			data, err := makeSitePageData(currentRepo.Repository)
-			if err != nil {
-				log.Println("failed to hydrate page:", err)
-				http.Error(w, "Failed to hydrate page. See logs for details.", http.StatusInternalServerError)
-				return
-			}
-			data.Error = "Changed branch to " + chosenBranch + " successfully, but failed to refresh snapshot. See logs for details."
-			renderTemplate(w, templ.Site, http.StatusInternalServerError, data)
+		// happy path everything worked out okay
+		if branchErr == nil && refreshErr == nil {
+			http.Redirect(w, r, "/admin/site", http.StatusSeeOther)
 			return
 		}
 
-		// this will refresh with new data instead of what we collected prior to the new snapshot
-		http.Redirect(w, r, "/admin/site", http.StatusSeeOther)
+		// something went wrong and we need to
+		// regenerate the page with all the data we had earlier
+		data, siteSettingsErr := makeSitePageData(currentRepo.Repository)
+		if siteSettingsErr != nil {
+			log.Println("failed to hydrate page:", siteSettingsErr)
+			http.Error(w, "Failed to load site settings. See logs for details.", http.StatusInternalServerError)
+			return
+		}
+
+		if branchErr != nil {
+			log.Println("failed to change published branch:", branchErr)
+			data.Error = "Unable to change branch to " + chosenBranch
+		} else {
+			log.Println("changed HEAD but snapshot refresh failed:", refreshErr)
+			data.Error = "Changed branch to " + chosenBranch + ", but failed to refresh snapshot. See logs for details."
+		}
+
+		renderTemplate(w, templ.Site, http.StatusInternalServerError, data)
 	})
 
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
