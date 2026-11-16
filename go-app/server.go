@@ -163,7 +163,12 @@ func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			renderCommit(matched.OldPath, commit)
+			revisionPath := matched.OldPath
+			if matched.NewPath != "" {
+				revisionPath = matched.NewPath
+			}
+
+			renderCommit(revisionPath, commit)
 			return
 		}
 
