@@ -7,6 +7,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -275,4 +276,204 @@ func TestHistoryAfterMerge(t *testing.T) {
 	if !hasRevision(editHash.String()) {
 		t.Error("Story.md is missing its edit commit")
 	}
+}
+
+func TestSetPublishedBranch(t *testing.T) {
+	dir := t.TempDir()
+
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "story.txt"), []byte("Hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := worktree.Add("story.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := worktree.Commit("First story", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Original Author",
+			Email: "original@example.com",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainRef := plumbing.NewBranchReferenceName("main")
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(mainRef, hash)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := setPublishedBranch(repo, "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	head, err := repo.Reference(plumbing.HEAD, false) // false to prevent resolving HEAD's reference
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if head.Target() != mainRef {
+		t.Errorf("HEAD points to %s; want %s", head.Target(), mainRef)
+	}
+
+	// test failure case: nonexistent branch
+	if err := setPublishedBranch(repo, "missing"); err == nil {
+		t.Error("expected an error for a missing branch")
+	}
+
+	head, err = repo.Reference(plumbing.HEAD, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if head.Target() != mainRef {
+		t.Errorf("HEAD changed to %s; want it to remain %s", head.Target(), mainRef)
+	}
+
+	// test failure case: invalid branch
+	if err := setPublishedBranch(repo, "/feature"); err == nil {
+		t.Error("expected an error for an invalid-named branch")
+	}
+
+	head, err = repo.Reference(plumbing.HEAD, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if head.Target() != mainRef {
+		t.Errorf("HEAD changed to %s; want it to remain %s", head.Target(), mainRef)
+	}
+}
+
+// situation on startup where push happens but HEAD is now pointing at nothing
+// expected behavior: return error (and for app side, don't take down application)
+func TestSnapshotWithUnbornHead(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := git.PlainInit(dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := loadRepo(dir)
+	if err != nil {
+		t.Fatalf("open empty bare repo: %v", err)
+	}
+	defer repo.RepositoryRoot.Close()
+
+	_, err = onPush(repo)
+	if err == nil {
+		t.Error("expected error: HEAD has no commit")
+	}
+}
+
+// HEAD is on master but you are actually a main fan
+// expected behavior: moving the HEAD to an existing branch
+// should regenerate the snapshot correctly
+func TestSnapshotWithRecoveredHead(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := git.PlainInit(dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := loadRepo(dir)
+	if err != nil {
+		t.Fatalf("open empty bare repo: %v", err)
+	}
+	defer repo.RepositoryRoot.Close()
+
+	_, err = onPush(repo)
+	if err == nil {
+		t.Error("expected error: HEAD has no commit")
+	}
+
+	// second repo to push a commit into bare repo
+	workDir := t.TempDir()
+
+	workRepo, err := git.PlainInit(workDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	worktree, err := workRepo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workDir, "story.md"), []byte("# Hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := worktree.Add("story.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := worktree.Commit("First story", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Original Author",
+			Email: "original@example.com",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mainRef := plumbing.NewBranchReferenceName("main")
+	if err := workRepo.Storer.SetReference(plumbing.NewHashReference(mainRef, hash)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = workRepo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{dir},
+	})
+	if err != nil {
+		t.Fatalf("create remote: %v", err)
+	}
+
+	err = workRepo.Push(&git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs: []config.RefSpec{
+			"refs/heads/main:refs/heads/main",
+		},
+	})
+	if err != nil {
+		t.Fatalf("push main to bare repo: %v", err)
+	}
+
+	// check that HEAD is pointing to a non-existent master still
+	if _, err := onPush(repo); err == nil {
+		t.Fatal("expected snapshot to fail before switching HEAD to main")
+	}
+
+	// update the HEAD to point at newly-existing main branch
+	// and check if that now works
+	if err := setPublishedBranch(repo.Repository, "main"); err != nil {
+		t.Fatalf("set published branch: %v", err)
+	}
+
+	snapshot, err := onPush(repo)
+	if err != nil {
+		t.Fatalf("build snapshot after switching to main: %v", err)
+	}
+
+	if snapshot.Commit.Hash.String() != hash.String() {
+		t.Fatalf("snapshot hash does not meet commit hash: expected %s, got %s", hash.String(), snapshot.Commit.Hash.String())
+	}
+
 }

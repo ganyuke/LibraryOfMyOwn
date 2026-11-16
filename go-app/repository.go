@@ -13,6 +13,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -28,8 +29,6 @@ type Repository struct {
 	RepositoryPath         string
 	RepositoryRoot         *os.Root
 	Repository             *git.Repository
-	HeadCommit             *object.Commit
-	CurrentFilePaths       []string
 }
 
 type FileRevision struct {
@@ -91,10 +90,6 @@ func readFileAtCommit(commit *object.Commit, path string) ([]byte, error) {
 	}
 
 	return []byte(content), nil
-}
-
-func walkHistoryInRepo(repo Repository) (RevisionHistory, error) {
-	return walkHistoryAtCommit(repo.RepositoryPath, repo.HeadCommit.Hash.String(), repo.CurrentFilePaths)
 }
 
 func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (RevisionHistory, error) {
@@ -182,30 +177,21 @@ func walkHistoryAtCommit(repoPath string, commitHash string, paths []string) (Re
 	return revisionList, nil
 }
 
-func loadRepo(repoPath string) Repository {
+func loadRepo(repoPath string) (Repository, error) {
 	absolutePath, err := filepath.Abs(repoPath)
 	if err != nil {
-		log.Fatal("could not resolve absolute repository path:", err)
+		return Repository{}, fmt.Errorf("failed to resolve absolute repository path: %w", err)
 	}
 
 	repoRoot, err := os.OpenRoot(repoPath)
 	if err != nil {
-		log.Fatal("Could not open stories directory:", err)
+		return Repository{}, fmt.Errorf("failed to open repository directory: %w", err)
 	}
 
 	repo, err := openRepository(repoPath)
 	if err != nil {
-		log.Fatal("Could not open stories repository:", err)
-	}
-
-	headCommit, err := getHeadCommit(repo)
-	if err != nil {
-		log.Fatal("Could not resolve stories HEAD:", err)
-	}
-
-	files, err := listFilesPathsAtCommit(headCommit)
-	if err != nil {
-		log.Fatal("Could not resolve stories HEAD:", err)
+		repoRoot.Close()
+		return Repository{}, fmt.Errorf("failed to open repository: %w", err)
 	}
 
 	return Repository{
@@ -213,39 +199,21 @@ func loadRepo(repoPath string) Repository {
 		RepositoryPath:         repoPath,
 		RepositoryRoot:         repoRoot,
 		Repository:             repo,
-		HeadCommit:             headCommit,
-		CurrentFilePaths:       files,
-	}
+	}, nil
 }
 
-func refreshRepo(repo Repository) Repository {
-	headCommit, err := getHeadCommit(repo.Repository)
+func makeSnapshot(repo Repository, commit *object.Commit) (Snapshot, error) {
+	files, err := listFilesPathsAtCommit(commit)
 	if err != nil {
-		log.Fatal("Could not resolve stories HEAD:", err)
+		return Snapshot{}, fmt.Errorf("failed to list files from HEAD: %w", err)
 	}
 
-	files, err := listFilesPathsAtCommit(headCommit)
-	if err != nil {
-		log.Fatal("Could not resolve stories HEAD:", err)
-	}
-
-	return Repository{
-		AbsoluteRepositoryPath: repo.AbsoluteRepositoryPath,
-		RepositoryPath:         repo.RepositoryPath,
-		RepositoryRoot:         repo.RepositoryRoot,
-		Repository:             repo.Repository,
-		HeadCommit:             headCommit,
-		CurrentFilePaths:       files,
-	}
-}
-
-func makeSnapshot(repo Repository) (Snapshot, error) {
-	history, err := walkHistoryInRepo(repo)
+	history, err := walkHistoryAtCommit(repo.RepositoryPath, commit.Hash.String(), files)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("failed to walk history: %w", err)
 	}
 
-	storyIndex, err := buildStoryIndex(repo.HeadCommit, history)
+	storyIndex, err := buildStoryIndex(commit, history)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("failed to build index: %w", err)
 	}
@@ -264,21 +232,28 @@ func makeSnapshot(repo Repository) (Snapshot, error) {
 	}
 
 	return Snapshot{
-		Commit:     repo.HeadCommit,
+		Commit:     commit,
 		Index:      storyIndex,
 		History:    history,
 		IndexSlugs: indexSlugs,
 	}, nil
 }
 
-func onPush(repo Repository) (Repository, Snapshot, error) {
-	repo = refreshRepo(repo)
-	snapshot, err := makeSnapshot(repo)
+func onPush(repo Repository) (Snapshot, error) {
+	head, err := getHeadCommit(repo.Repository)
+	// swallow the refresh error. implication: server doesn't
+	// get murdered but now there's stale data that you need to fix
+	// case: admin decided to rename the branch that HEAD was on
 	if err != nil {
-		return Repository{}, Snapshot{}, err
+		return Snapshot{}, err
 	}
 
-	return repo, snapshot, nil
+	snapshot, err := makeSnapshot(repo, head)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	return snapshot, nil
 }
 
 func findGitInternalFilePath(repoPath string, file string) (string, error) {
@@ -378,6 +353,26 @@ func deployDaemonExportOk(repoPath string) error {
 	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("failed to close git-daemon-export-ok: %w", err)
+	}
+
+	return nil
+}
+
+// move the HEAD to the branch that the site should be publishing from
+func setPublishedBranch(repo *git.Repository, branch string) error {
+	branchRef := plumbing.NewBranchReferenceName(branch)
+
+	if err := branchRef.Validate(); err != nil {
+		return fmt.Errorf("invalid branch %q: %w", branch, err)
+	}
+
+	if _, err := repo.Reference(branchRef, true); err != nil {
+		return fmt.Errorf("find branch %q: %w", branch, err)
+	}
+
+	head := plumbing.NewSymbolicReference(plumbing.HEAD, branchRef)
+	if err := repo.Storer.SetReference(head); err != nil {
+		return fmt.Errorf("set HEAD to branch %q: %w", branch, err)
 	}
 
 	return nil

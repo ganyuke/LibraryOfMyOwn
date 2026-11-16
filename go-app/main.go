@@ -32,7 +32,10 @@ func main() {
 	mux := http.NewServeMux()
 	sessions := scs.New()
 	templ := makeTemplates()
-	repo := loadRepo("../examples/private/")
+	repo, err := loadRepo("../examples/private/")
+	if err != nil {
+		log.Fatal("failed to load repository: %w", err)
+	}
 	repoName := filepath.Base(repo.AbsoluteRepositoryPath)
 
 	err = deployDaemonExportOk(repo.RepositoryPath)
@@ -87,7 +90,7 @@ func main() {
 		gitBackend.ServeHTTP(w, gitRequest)
 	})
 
-	snapshot, snapshotErr := makeSnapshot(repo)
+	snapshot, snapshotErr := onPush(repo)
 
 	var antiRefreshMutex sync.RWMutex
 	var refreshWriteMutex sync.Mutex
@@ -225,7 +228,7 @@ func main() {
 
 		entry := entries[0]
 
-		renderCommit(entry.SourcePath, currentRepo.HeadCommit)
+		renderCommit(entry.SourcePath, currentSnapshot.Commit)
 	})
 
 	mux.HandleFunc("POST /internal/kaboom",
@@ -265,11 +268,10 @@ func main() {
 
 			// no lock on reads yet so we can continue serving
 			// the current snapshot while building the next
-			nRepo, nSnapshot, pushErr := onPush(currentRepo)
+			nSnapshot, pushErr := onPush(currentRepo)
 			if pushErr == nil {
 				// acquire write lock while swapping out the old snapshot
 				antiRefreshMutex.Lock()
-				repo = nRepo
 				snapshot = nSnapshot
 				snapshotErr = nil
 				antiRefreshMutex.Unlock()
