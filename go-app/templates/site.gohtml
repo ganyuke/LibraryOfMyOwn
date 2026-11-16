@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Site management</title>
+    </head>
+    <body>
+        <h1>Site management</h1>
+
+        {{if .Error}}
+        <p class="error">{{.Error}}</p>
+        {{end}}
+
+        <form method="POST" action="/admin/site">
+            <label for="branch">Published branch</label>
+            <select id="branch" name="branch" required>
+                {{if .IsMissing}}
+                    <option value="" selected disabled>{{.CurrentBranch}} (missing)</option>
+                {{end}}
+
+                {{range .Branches}}
+                    <option value="{{.}}" {{if eq . $.CurrentBranch}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+
+            <button type="submit">Save</button>
+        </form>
+
+    </body>
+</html>

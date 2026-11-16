@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"slices"
 	"time"
+
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 type Templates struct {
@@ -13,6 +18,8 @@ type Templates struct {
 	Story   *template.Template
 	History *template.Template
 	Login   *template.Template
+	Admin   *template.Template
+	Site    *template.Template
 }
 
 // mediawiki style date
@@ -38,6 +45,42 @@ func isShortSha(hex string) bool {
 	}
 
 	return true
+}
+
+type HistoryPageData struct {
+	Entry     StoryIndexEntry
+	Revisions []FileRevision
+}
+
+type LoginPageData struct {
+	Error string
+}
+
+type SitePageData struct {
+	Error         string
+	Branches      []string
+	IsMissing     bool
+	CurrentBranch string
+}
+
+func makeSitePageData(repo *git.Repository) (SitePageData, error) {
+	branches, err := listBranches(repo)
+	if err != nil {
+		return SitePageData{}, fmt.Errorf("list branches: %w", err)
+	}
+
+	head, err := repo.Reference(plumbing.HEAD, false)
+	if err != nil {
+		return SitePageData{}, fmt.Errorf("read HEAD: %w", err)
+	}
+
+	currentBranch := head.Target().Short()
+
+	return SitePageData{
+		Branches:      branches,
+		CurrentBranch: currentBranch,
+		IsMissing:     !slices.Contains(branches, currentBranch),
+	}, nil
 }
 
 // generic HTTP writer handler to buffer responses before sending them over the wire
@@ -79,5 +122,7 @@ func makeTemplates() Templates {
 		Story:   template.Must(template.New("story.gohtml").Funcs(funcs).ParseFiles("templates/story.gohtml")),
 		History: template.Must(template.New("history.gohtml").Funcs(funcs).ParseFiles("templates/history.gohtml")),
 		Login:   template.Must(template.New("login.gohtml").Funcs(funcs).ParseFiles("templates/login.gohtml")),
+		Admin:   template.Must(template.New("admin.gohtml").Funcs(funcs).ParseFiles("templates/admin.gohtml")),
+		Site:    template.Must(template.New("site.gohtml").Funcs(funcs).ParseFiles("templates/site.gohtml")),
 	}
 }

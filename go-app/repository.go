@@ -377,3 +377,24 @@ func setPublishedBranch(repo *git.Repository, branch string) error {
 
 	return nil
 }
+
+// slice is nil when repo has no branches
+func listBranches(repo *git.Repository) ([]string, error) {
+	var names []string
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return nil, err
+	}
+	defer branches.Close()
+
+	err = branches.ForEach(func(ref *plumbing.Reference) error {
+		names = append(names, ref.Name().Short())
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return names, nil
+}

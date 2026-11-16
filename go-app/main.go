@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/subtle"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/cgi"
@@ -14,15 +13,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
-
-type HistoryPageData struct {
-	Entry     StoryIndexEntry
-	Revisions []FileRevision
-}
-
-type LoginPageData struct {
-	Error string
-}
 
 func main() {
 	secrets, err := generateSecrets()
@@ -94,6 +84,25 @@ func main() {
 
 	var antiRefreshMutex sync.RWMutex
 	var refreshWriteMutex sync.Mutex
+
+	// must hold the refreshWriteMutex as well before using this function
+	refreshSnapshot := func() error {
+		antiRefreshMutex.RLock()
+		currentRepo := repo
+		antiRefreshMutex.RUnlock()
+
+		newSnapshot, err := onPush(currentRepo)
+		if err != nil {
+			return err
+		}
+
+		antiRefreshMutex.Lock()
+		snapshot = newSnapshot
+		snapshotErr = nil
+		antiRefreshMutex.Unlock()
+
+		return nil
+	}
 
 	// root index route (/)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -261,21 +270,7 @@ func main() {
 
 			// prevent refreshing from stepping on each other by serializing
 			refreshWriteMutex.Lock()
-
-			antiRefreshMutex.RLock()
-			currentRepo := repo
-			antiRefreshMutex.RUnlock()
-
-			// no lock on reads yet so we can continue serving
-			// the current snapshot while building the next
-			nSnapshot, pushErr := onPush(currentRepo)
-			if pushErr == nil {
-				// acquire write lock while swapping out the old snapshot
-				antiRefreshMutex.Lock()
-				snapshot = nSnapshot
-				snapshotErr = nil
-				antiRefreshMutex.Unlock()
-			}
+			pushErr := refreshSnapshot()
 			refreshWriteMutex.Unlock()
 
 			if pushErr != nil {
@@ -296,13 +291,75 @@ func main() {
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `
-			<p>Welcome, admin!</p>
-			<form method="POST" action="/logout">
-				<button type="submit">Log out</button>
-			</form>
-		`)
+		renderTemplate(w, templ.Admin, http.StatusOK, nil)
+	})
+
+	mux.HandleFunc("GET /admin/site", func(w http.ResponseWriter, r *http.Request) {
+		if !sessions.GetBool(r.Context(), "authenticated") {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		antiRefreshMutex.RLock()
+		currentRepo := repo
+		antiRefreshMutex.RUnlock()
+
+		data, err := makeSitePageData(currentRepo.Repository)
+		if err != nil {
+			log.Println("failed to hydrate page:", err)
+			http.Error(w, "Failed to hydrate page. See logs for details.", http.StatusInternalServerError)
+			return
+		}
+
+		renderTemplate(w, templ.Site, http.StatusOK, data)
+	})
+
+	mux.HandleFunc("POST /admin/site", func(w http.ResponseWriter, r *http.Request) {
+		if !sessions.GetBool(r.Context(), "authenticated") {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		antiRefreshMutex.RLock()
+		currentRepo := repo
+		antiRefreshMutex.RUnlock()
+
+		data, err := makeSitePageData(currentRepo.Repository)
+		if err != nil {
+			log.Println("failed to hydrate page:", err)
+			http.Error(w, "Failed to hydrate page. See logs for details.", http.StatusInternalServerError)
+			return
+		}
+
+		chosenBranch := r.PostFormValue("branch")
+
+		refreshWriteMutex.Lock()
+		err = setPublishedBranch(repo.Repository, chosenBranch)
+		if err != nil {
+			refreshWriteMutex.Unlock()
+			data.Error = "Unable to change branch to " + chosenBranch
+			renderTemplate(w, templ.Site, http.StatusInternalServerError, data)
+			return
+		}
+
+		err = refreshSnapshot()
+		refreshWriteMutex.Unlock()
+
+		if err != nil {
+			log.Println("changed HEAD but snapshot refresh failed:", err)
+			data, err := makeSitePageData(currentRepo.Repository)
+			if err != nil {
+				log.Println("failed to hydrate page:", err)
+				http.Error(w, "Failed to hydrate page. See logs for details.", http.StatusInternalServerError)
+				return
+			}
+			data.Error = "Changed branch to " + chosenBranch + " successfully, but failed to refresh snapshot. See logs for details."
+			renderTemplate(w, templ.Site, http.StatusInternalServerError, data)
+			return
+		}
+
+		// this will refresh with new data instead of what we collected prior to the new snapshot
+		http.Redirect(w, r, "/admin/site", http.StatusSeeOther)
 	})
 
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
