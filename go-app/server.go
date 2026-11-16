@@ -83,6 +83,119 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	renderTemplate(w, s.templ.Index, http.StatusOK, s.publishedIndex(currentSnapshot.Index))
 }
+func (s *Server) subHandleStory(w http.ResponseWriter, r *http.Request, entry StoryIndexEntry, commit *object.Commit) {
+	if !s.isPublished(entry.SourcePath) {
+		http.NotFound(w, r)
+		return
+	}
+
+	s.renderCommit(w, entry.SourcePath, commit)
+}
+
+func (s *Server) subHandleHistory(w http.ResponseWriter, r *http.Request, slug string, snapshot Snapshot) {
+	entries, found := snapshot.IndexSlugs[slug]
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	entry := entries[0]
+	if !s.isPublished(entry.SourcePath) {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := HistoryPageData{
+		Entry:     entry,
+		Revisions: snapshot.History[entry.SourcePath],
+	}
+
+	renderTemplate(w, s.templ.History, http.StatusOK, data)
+}
+
+func (s *Server) subHandleRevision(
+	w http.ResponseWriter,
+	r *http.Request,
+	slug string,
+	shortHash string,
+	snapshot Snapshot,
+	repo Repository,
+) {
+	if !isShortSha(shortHash) {
+		http.NotFound(w, r)
+		return
+	}
+
+	entries, found := snapshot.IndexSlugs[slug]
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	entry := entries[0]
+	if !s.isPublished(entry.SourcePath) {
+		http.NotFound(w, r)
+		return
+	}
+
+	var matched FileRevision
+	matches := 0
+
+	for _, revision := range snapshot.History[entry.SourcePath] {
+		if strings.HasPrefix(revision.Hash, shortHash) {
+			matched = revision
+			matches++
+		}
+	}
+
+	if matches == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if matches > 1 {
+		http.Error(w, "Short SHA collision detected; unable to show commit.", http.StatusConflict)
+		return
+	}
+
+	hash, err := repo.Repository.ResolveRevision(plumbing.Revision(matched.Hash))
+	if err != nil {
+		log.Println("failed to resolve revision:", err)
+		http.Error(w, "Failed to resolve revision", http.StatusInternalServerError)
+		return
+	}
+
+	commit, err := repo.Repository.CommitObject(*hash)
+	if err != nil {
+		log.Println("failed to load commit:", err)
+		http.Error(w, "Failed to load commit", http.StatusInternalServerError)
+		return
+	}
+
+	revisionPath := matched.OldPath
+	if matched.NewPath != "" {
+		revisionPath = matched.NewPath
+	}
+
+	s.renderCommit(w, revisionPath, commit)
+}
+
+func (s *Server) renderCommit(w http.ResponseWriter, src string, commit *object.Commit) {
+	file, err := readFileAtCommit(commit, src)
+	if err != nil {
+		log.Println("Could not read story:", err)
+		http.Error(w, "Could not read story", http.StatusInternalServerError)
+		return
+	}
+
+	story := parseStory(file, src)
+	storyRendered, err := renderStory(story)
+	if err != nil {
+		http.Error(w, "Could not render story", http.StatusInternalServerError)
+		return
+	}
+
+	renderTemplate(w, s.templ.Story, http.StatusOK, storyRendered)
+}
 
 func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 	s.antiRefreshMutex.RLock()
@@ -101,125 +214,30 @@ func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 
 	entries, found := currentSnapshot.IndexSlugs[path]
 
-	renderCommit := func(src string, commit *object.Commit) {
-		file, err := readFileAtCommit(commit, src)
-		if err != nil {
-			log.Println("Could not read story:", err)
-			http.Error(w, "Could not read story", http.StatusInternalServerError)
-			return
-		}
-
-		story := parseStory(file, src)
-		storyRendered, err := renderStory(story)
-		if err != nil {
-			http.Error(w, "Could not render story", http.StatusInternalServerError)
-			return
-		}
-
-		renderTemplate(w, s.templ.Story, http.StatusOK, storyRendered)
-	}
-
-	if !found {
-		// handle history path
-		pathSplit := strings.Split(path, "/")
-		if pathSplit[len(pathSplit)-1] == "history" {
-			truncatedPath := path[:len(path)-len("/history")]
-			entries, found := currentSnapshot.IndexSlugs[truncatedPath]
-
-			if !found {
-				http.NotFound(w, r)
-				return
-			}
-
-			entry := entries[0]
-			if !s.isPublished(entry.SourcePath) {
-				http.NotFound(w, r)
-				return
-			}
-
-			entryHistory := currentSnapshot.History[entry.SourcePath]
-
-			historyPgData := HistoryPageData{
-				Entry:     entry,
-				Revisions: entryHistory,
-			}
-
-			renderTemplate(w, s.templ.History, http.StatusOK, historyPgData)
-			return
-		}
-
-		shortHash := pathSplit[len(pathSplit)-1]
-		if len(pathSplit) >= 2 && pathSplit[len(pathSplit)-2] == "r" && isShortSha(shortHash) {
-			truncatedPath := path[:len(path)-len("/r/")-7]
-			entries, found := currentSnapshot.IndexSlugs[truncatedPath]
-
-			if !found {
-				http.NotFound(w, r)
-				return
-			}
-
-			entry := entries[0]
-			if !s.isPublished(entry.SourcePath) {
-				http.NotFound(w, r)
-				return
-			}
-
-			entryHistory := currentSnapshot.History[entry.SourcePath]
-
-			var matched FileRevision
-			matches := 0
-
-			for _, revision := range entryHistory {
-				if strings.HasPrefix(revision.Hash, shortHash) {
-					matched = revision
-					matches += 1
-				}
-			}
-
-			if matches == 0 {
-				http.NotFound(w, r)
-				return
-			}
-
-			if matches > 1 {
-				http.Error(w, "Short SHA collision detected; unable to show commit.", http.StatusConflict)
-				return
-			}
-
-			hash, err := currentRepo.Repository.ResolveRevision(plumbing.Revision(matched.Hash))
-			if err != nil {
-				log.Println("Could not resolve revision:", err)
-				return
-			}
-
-			commit, err := currentRepo.Repository.CommitObject(*hash)
-			if err != nil {
-				log.Println("Could not load commit:", err)
-				return
-			}
-
-			revisionPath := matched.OldPath
-			if matched.NewPath != "" {
-				revisionPath = matched.NewPath
-			}
-
-			renderCommit(revisionPath, commit)
-			return
-		}
-
-		// not a special page
-		http.NotFound(w, r)
+	// case: story path
+	if found {
+		s.subHandleStory(w, r, entries[0], currentSnapshot.Commit)
 		return
 	}
 
-	entry := entries[0]
-
-	if !s.isPublished(entry.SourcePath) {
-		http.NotFound(w, r)
+	// case: history page
+	// (stories literally named history would have been matched by the first rule)
+	if slug, ok := strings.CutSuffix(path, "/history"); ok {
+		s.subHandleHistory(w, r, slug, currentSnapshot)
 		return
 	}
 
-	renderCommit(entry.SourcePath, currentSnapshot.Commit)
+	// case: revision URL
+	revisionSeparator := strings.LastIndex(path, "/r/") // since /r/ is a valid name for a story directory
+	if revisionSeparator >= 0 {
+		slug := path[:revisionSeparator]
+		shortHash := path[revisionSeparator+len("/r/"):]
+		s.subHandleRevision(w, r, slug, shortHash, currentSnapshot, currentRepo)
+		return
+	}
+
+	// fallback case: 404
+	http.NotFound(w, r)
 }
 
 func (s *Server) handleKaboom(w http.ResponseWriter, r *http.Request) {
