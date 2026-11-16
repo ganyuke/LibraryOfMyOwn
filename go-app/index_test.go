@@ -9,8 +9,8 @@ func TestSlugGeneration(t *testing.T) {
 		path string
 		want string
 	}{
-		{"Mainline/My Story.md", "mainline/my-story"},
-		{"Workshop/Hello -- World!.md", "workshop/hello-world"},
+		{"Hololive/Micomet.md", "hololive/micomet"},
+		{"Elaina/Sou -- watashi desu!.md", "elaina/sou-watashi-desu"},
 		{"Café.md", "café"},
 	}
 

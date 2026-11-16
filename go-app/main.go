@@ -8,9 +8,10 @@ import (
 )
 
 func main() {
-	secrets, err := generateSecrets()
+	secretsFile := "secrets.txt"
+	secrets, err := generateSecrets(secretsFile)
 	if err != nil {
-		log.Fatalf("failed to generate/read secrets.txt: %v", err)
+		log.Fatalf("failed to generate/read %s: %v", secretsFile, err)
 	}
 	mux := http.NewServeMux()
 	sessions := scs.New()
@@ -31,6 +32,11 @@ func main() {
 
 	snapshot, snapshotErr := onPush(repo)
 
+	settings, err := generateSettings("site_settings.json")
+	if err != nil {
+		log.Fatal("failed to load site settings: ", err)
+	}
+
 	server := &Server{
 		repo:        repo,
 		snapshot:    snapshot,
@@ -38,6 +44,7 @@ func main() {
 		templ:       templ,
 		sessions:    sessions,
 		secrets:     secrets,
+		settings:    settings,
 	}
 
 	// root index route (/)
@@ -56,6 +63,10 @@ func main() {
 	mux.HandleFunc("GET /admin/site", server.handleAdminSiteSettings)
 
 	mux.HandleFunc("POST /admin/site", server.handAdminSiteSettingsPOST)
+
+	mux.HandleFunc("GET /admin/publish", server.handleAdminPublish)
+
+	mux.HandleFunc("POST /admin/publish", server.handleAdminPublishPOST)
 
 	mux.HandleFunc("GET /login", server.handleLogin)
 

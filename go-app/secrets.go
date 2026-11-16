@@ -17,8 +17,8 @@ type Secrets struct {
 	GitPassword           string
 }
 
-func generateSecrets() (Secrets, error) {
-	secrets, err := os.OpenFile("secrets.txt", os.O_RDONLY, 0)
+func generateSecrets(path string) (Secrets, error) {
+	secrets, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		// generate new secrets
 		hook, admin, git := rand.Text(), rand.Text(), rand.Text()
@@ -33,9 +33,9 @@ func generateSecrets() (Secrets, error) {
 			return Secrets{}, fmt.Errorf("failed to hash git password: %w", err)
 		}
 
-		err = os.WriteFile("secrets.txt", []byte(strings.Join([]string{hook, adminHash, gitHash}, "\n")), 0600)
+		err = os.WriteFile(path, []byte(strings.Join([]string{hook, adminHash, gitHash}, "\n")), 0600)
 		if err != nil {
-			return Secrets{}, fmt.Errorf("failed to write secrets.txt: %w", err)
+			return Secrets{}, fmt.Errorf("failed to write %s: %w", path, err)
 		}
 
 		log.Println("---- START OF GENERATED SECRETS ----")

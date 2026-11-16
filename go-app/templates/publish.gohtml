@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Publish stories</title>
+    </head>
+    <body>
+        <h1>Publish stories</h1>
+
+        {{if .Error}}
+        <p class="error">{{.Error}}</p>
+        {{end}}
+
+        <form method="POST" action="/admin/publish">
+            {{range .Options}}
+            <div>
+                <label>
+                    <input
+                        type="checkbox"
+                        name="published"
+                        value="{{.Path}}"
+                        {{if
+                        .Published}}checked{{end}}
+                    />
+                    {{if .Missing}} {{.Path}} (missing) {{else}} {{.Title}} —
+                    {{.Path}} {{end}}
+                </label>
+            </div>
+            {{end}}
+
+            <button type="submit">Save</button>
+        </form>
+    </body>
+</html>

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
@@ -20,6 +21,35 @@ type Templates struct {
 	Login   *template.Template
 	Admin   *template.Template
 	Site    *template.Template
+	Publish *template.Template
+}
+
+type HistoryPageData struct {
+	Entry     StoryIndexEntry
+	Revisions []FileRevision
+}
+
+type LoginPageData struct {
+	Error string
+}
+
+type SitePageData struct {
+	Error         string
+	Branches      []string
+	IsMissing     bool
+	CurrentBranch string
+}
+
+type PublishOption struct {
+	Title     string
+	Path      string
+	Published bool
+	Missing   bool
+}
+
+type PublishPageData struct {
+	Options []PublishOption
+	Error   string
 }
 
 // mediawiki style date
@@ -47,22 +77,6 @@ func isShortSha(hex string) bool {
 	return true
 }
 
-type HistoryPageData struct {
-	Entry     StoryIndexEntry
-	Revisions []FileRevision
-}
-
-type LoginPageData struct {
-	Error string
-}
-
-type SitePageData struct {
-	Error         string
-	Branches      []string
-	IsMissing     bool
-	CurrentBranch string
-}
-
 func makeSitePageData(repo *git.Repository) (SitePageData, error) {
 	branches, err := listBranches(repo)
 	if err != nil {
@@ -81,6 +95,41 @@ func makeSitePageData(repo *git.Repository) (SitePageData, error) {
 		CurrentBranch: currentBranch,
 		IsMissing:     !slices.Contains(branches, currentBranch),
 	}, nil
+}
+
+func makePublishPageData(index []StoryIndexEntry, settings SiteSettings) PublishPageData {
+	var data PublishPageData
+	currentPaths := make(map[string]bool)
+
+	// add currently recognized paths to the list
+	for _, story := range index {
+		currentPaths[story.SourcePath] = true // to tell if a path in site settings is stale
+		data.Options = append(data.Options, PublishOption{
+			Title:     story.Title,
+			Path:      story.SourcePath,
+			Published: settings.PublishedPaths[story.SourcePath],
+		})
+	}
+
+	// add nonexistent paths still marked in the site settings as published
+	// i.e. stale/missing published paths
+	for path, published := range settings.PublishedPaths {
+		if published && !currentPaths[path] {
+			data.Options = append(data.Options, PublishOption{
+				Path:      path,
+				Published: true,
+				Missing:   true,
+			})
+		}
+	}
+
+	// since maps don't guarantee order and
+	// having options jumping around is really annoying
+	slices.SortFunc(data.Options, func(a, b PublishOption) int {
+		return strings.Compare(a.Path, b.Path)
+	})
+
+	return data
 }
 
 // generic HTTP writer handler to buffer responses before sending them over the wire
@@ -117,12 +166,19 @@ func makeTemplates() Templates {
 		},
 	}
 
+	parse := func(name string) *template.Template {
+		return template.Must(
+			template.New(name).Funcs(funcs).ParseFiles("templates/" + name),
+		)
+	}
+
 	return Templates{
-		Index:   template.Must(template.New("index.gohtml").Funcs(funcs).ParseFiles("templates/index.gohtml")),
-		Story:   template.Must(template.New("story.gohtml").Funcs(funcs).ParseFiles("templates/story.gohtml")),
-		History: template.Must(template.New("history.gohtml").Funcs(funcs).ParseFiles("templates/history.gohtml")),
-		Login:   template.Must(template.New("login.gohtml").Funcs(funcs).ParseFiles("templates/login.gohtml")),
-		Admin:   template.Must(template.New("admin.gohtml").Funcs(funcs).ParseFiles("templates/admin.gohtml")),
-		Site:    template.Must(template.New("site.gohtml").Funcs(funcs).ParseFiles("templates/site.gohtml")),
+		Index:   parse("index.gohtml"),
+		Story:   parse("story.gohtml"),
+		History: parse("history.gohtml"),
+		Login:   parse("login.gohtml"),
+		Admin:   parse("admin.gohtml"),
+		Site:    parse("site.gohtml"),
+		Publish: parse("publish.gohtml"),
 	}
 }

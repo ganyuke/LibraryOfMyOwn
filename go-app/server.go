@@ -23,6 +23,31 @@ type Server struct {
 
 	antiRefreshMutex  sync.RWMutex
 	refreshWriteMutex sync.Mutex
+
+	settingsMutex      sync.RWMutex
+	settingsWriteMutex sync.Mutex
+
+	settings SiteSettings
+}
+
+func (s *Server) isPublished(path string) bool {
+	s.settingsMutex.RLock()
+	defer s.settingsMutex.RUnlock()
+
+	return s.settings.PublishedPaths[path]
+}
+
+func (s *Server) publishedIndex(index []StoryIndexEntry) []StoryIndexEntry {
+	s.settingsMutex.RLock()
+	defer s.settingsMutex.RUnlock()
+
+	var result []StoryIndexEntry
+	for _, story := range index {
+		if s.settings.PublishedPaths[story.SourcePath] {
+			result = append(result, story)
+		}
+	}
+	return result
 }
 
 // must hold the refreshWriteMutex as well before using this function
@@ -56,7 +81,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderTemplate(w, s.templ.Index, http.StatusOK, currentSnapshot.Index)
+	renderTemplate(w, s.templ.Index, http.StatusOK, s.publishedIndex(currentSnapshot.Index))
 }
 
 func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +132,11 @@ func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 			}
 
 			entry := entries[0]
+			if !s.isPublished(entry.SourcePath) {
+				http.NotFound(w, r)
+				return
+			}
+
 			entryHistory := currentSnapshot.History[entry.SourcePath]
 
 			historyPgData := HistoryPageData{
@@ -129,6 +159,11 @@ func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 			}
 
 			entry := entries[0]
+			if !s.isPublished(entry.SourcePath) {
+				http.NotFound(w, r)
+				return
+			}
+
 			entryHistory := currentSnapshot.History[entry.SourcePath]
 
 			var matched FileRevision
@@ -178,6 +213,11 @@ func (s *Server) handleStories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entry := entries[0]
+
+	if !s.isPublished(entry.SourcePath) {
+		http.NotFound(w, r)
+		return
+	}
 
 	renderCommit(entry.SourcePath, currentSnapshot.Commit)
 }
@@ -297,6 +337,74 @@ func (s *Server) handAdminSiteSettingsPOST(w http.ResponseWriter, r *http.Reques
 	}
 
 	renderTemplate(w, s.templ.Site, http.StatusInternalServerError, data)
+}
+
+func (s *Server) handleAdminPublish(w http.ResponseWriter, r *http.Request) {
+	if !s.sessions.GetBool(r.Context(), "authenticated") {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	s.antiRefreshMutex.RLock()
+	index := s.snapshot.Index
+	snapshotErr := s.snapshotErr
+	s.antiRefreshMutex.RUnlock()
+
+	if snapshotErr != nil {
+		http.Error(w, "Could not load stories. See logs for details.", http.StatusInternalServerError)
+		return
+	}
+
+	// the POST request to change the settings could race so we use
+	// mutex here to lock that
+	s.settingsMutex.RLock()
+	data := makePublishPageData(index, s.settings)
+	s.settingsMutex.RUnlock()
+
+	renderTemplate(w, s.templ.Publish, http.StatusOK, data)
+}
+
+func (s *Server) handleAdminPublishPOST(w http.ResponseWriter, r *http.Request) {
+	if !s.sessions.GetBool(r.Context(), "authenticated") {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Could not read form", http.StatusBadRequest)
+		return
+	}
+
+	published := r.PostForm["published"]
+	newPaths := make(map[string]bool)
+
+	for _, path := range published {
+		newPaths[path] = true
+	}
+
+	s.settingsWriteMutex.Lock()
+
+	s.settingsMutex.RLock()
+	newSettings := s.settings
+	s.settingsMutex.RUnlock()
+	newSettings.PublishedPaths = newPaths
+
+	err := saveSettings("site_settings.json", newSettings)
+	if err == nil {
+		s.settingsMutex.Lock()
+		s.settings = newSettings
+		s.settingsMutex.Unlock()
+	}
+	s.settingsWriteMutex.Unlock()
+
+	if err != nil {
+		log.Println("failed to save site settings:", err)
+		http.Error(w, "Could not save settings. See logs for details.", http.StatusInternalServerError)
+		return
+	}
+
+	// happy path
+	http.Redirect(w, r, "/admin/publish", http.StatusSeeOther)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
